@@ -163,15 +163,17 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-chat-bg flex">
-      {/* Customer List */}
-      <CustomerList
-        customers={customers}
-        selectedCustomerId={selectedCustomerId}
-        onSelectCustomer={setSelectedCustomerId}
-      />
+      {/* Customer List - Fixed */}
+      <div className="fixed left-0 top-0 h-screen z-10">
+        <CustomerList
+          customers={customers}
+          selectedCustomerId={selectedCustomerId}
+          onSelectCustomer={setSelectedCustomerId}
+        />
+      </div>
 
       {/* Chat Area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col ml-80">
         {selectedCustomer ? (
           <>
             {/* Chat Header */}
