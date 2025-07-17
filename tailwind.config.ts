@@ -24,6 +24,23 @@ export default {
 				ring: 'hsl(var(--ring))',
 				background: 'hsl(var(--background))',
 				foreground: 'hsl(var(--foreground))',
+				
+				// WhatsApp specific colors
+				'whatsapp-green': {
+					DEFAULT: 'hsl(var(--whatsapp-green))',
+					dark: 'hsl(var(--whatsapp-green-dark))',
+					light: 'hsl(var(--whatsapp-green-light))'
+				},
+				'chat-bg': 'hsl(var(--chat-bg))',
+				'message-sent': {
+					DEFAULT: 'hsl(var(--message-sent))',
+					foreground: 'hsl(var(--message-sent-foreground))'
+				},
+				'message-received': {
+					DEFAULT: 'hsl(var(--message-received))',
+					foreground: 'hsl(var(--message-received-foreground))'
+				},
+				
 				primary: {
 					DEFAULT: 'hsl(var(--primary))',
 					foreground: 'hsl(var(--primary-foreground))'
@@ -35,6 +52,14 @@ export default {
 				destructive: {
 					DEFAULT: 'hsl(var(--destructive))',
 					foreground: 'hsl(var(--destructive-foreground))'
+				},
+				success: {
+					DEFAULT: 'hsl(var(--success))',
+					foreground: 'hsl(var(--success-foreground))'
+				},
+				warning: {
+					DEFAULT: 'hsl(var(--warning))',
+					foreground: 'hsl(var(--warning-foreground))'
 				},
 				muted: {
 					DEFAULT: 'hsl(var(--muted))',
@@ -84,11 +109,47 @@ export default {
 					to: {
 						height: '0'
 					}
+				},
+				'message-slide-in': {
+					'0%': {
+						opacity: '0',
+						transform: 'translateY(10px) scale(0.95)'
+					},
+					'100%': {
+						opacity: '1',
+						transform: 'translateY(0) scale(1)'
+					}
+				},
+				'bounce-gentle': {
+					'0%, 20%, 50%, 80%, 100%': {
+						transform: 'translateY(0)'
+					},
+					'40%': {
+						transform: 'translateY(-3px)'
+					},
+					'60%': {
+						transform: 'translateY(-2px)'
+					}
+				},
+				'pulse-whatsapp': {
+					'0%, 100%': {
+						boxShadow: '0 0 0 0 hsla(142, 70%, 49%, 0.4)'
+					},
+					'50%': {
+						boxShadow: '0 0 0 8px hsla(142, 70%, 49%, 0)'
+					}
 				}
 			},
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
-				'accordion-up': 'accordion-up 0.2s ease-out'
+				'accordion-up': 'accordion-up 0.2s ease-out',
+				'message-slide-in': 'message-slide-in 0.3s ease-out',
+				'bounce-gentle': 'bounce-gentle 1s ease-in-out',
+				'pulse-whatsapp': 'pulse-whatsapp 2s infinite'
+			},
+			boxShadow: {
+				'whatsapp': 'var(--shadow-whatsapp)',
+				'message': 'var(--shadow-message)'
 			}
 		}
 	},

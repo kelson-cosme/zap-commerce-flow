@@ -2,41 +2,76 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
+/* WhatsApp Loja - Design System
+Todas as cores devem ser HSL para compatibilidade total.
 */
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Background colors */
+    --background: 210 20% 98%;
+    --foreground: 215 20% 15%;
 
+    /* WhatsApp green theme */
+    --whatsapp-green: 142 70% 49%;
+    --whatsapp-green-dark: 142 70% 42%;
+    --whatsapp-green-light: 142 70% 85%;
+    
+    /* Chat colors */
+    --chat-bg: 210 15% 97%;
+    --message-sent: 142 70% 49%;
+    --message-sent-foreground: 0 0% 100%;
+    --message-received: 0 0% 100%;
+    --message-received-foreground: 215 20% 15%;
+    
+    /* Card and surfaces */
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 215 20% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 215 20% 15%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Primary colors (WhatsApp green) */
+    --primary: 142 70% 49%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* Secondary colors */
+    --secondary: 210 20% 96%;
+    --secondary-foreground: 215 20% 25%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    /* Muted colors */
+    --muted: 210 20% 96%;
+    --muted-foreground: 215 10% 45%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    /* Accent colors */
+    --accent: 142 40% 92%;
+    --accent-foreground: 142 70% 25%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    /* Status colors */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    
+    --success: 142 70% 49%;
+    --success-foreground: 0 0% 100%;
+    
+    --warning: 43 96% 56%;
+    --warning-foreground: 30 40% 15%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    /* Border and input */
+    --border: 214 31% 91%;
+    --input: 214 31% 91%;
+    --ring: 142 70% 49%;
 
-    --radius: 0.5rem;
+    /* Radius */
+    --radius: 0.75rem;
+    
+    /* Shadows */
+    --shadow-whatsapp: 0 2px 8px hsla(142, 70%, 49%, 0.15);
+    --shadow-message: 0 1px 3px hsla(215, 20%, 15%, 0.1);
+    
+    /* Gradients */
+    --gradient-whatsapp: linear-gradient(135deg, hsl(142, 70%, 49%), hsl(142, 70%, 42%));
+    --gradient-chat: linear-gradient(180deg, hsl(210, 20%, 98%), hsl(210, 15%, 96%));
 
     --sidebar-background: 0 0% 98%;
 
