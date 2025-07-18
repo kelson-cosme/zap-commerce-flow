@@ -4,64 +4,115 @@ import { MessageBubble, Message } from "@/components/MessageBubble";
 import { ChatInput } from "@/components/ChatInput";
 import { CustomerList, Customer } from "@/components/CustomerList";
 import { AdminPanel } from "@/components/AdminPanel";
+import { WhatsAppStatus } from "@/components/WhatsAppStatus";
 import { Button } from "@/components/ui/button";
 import { Settings, MessageSquare, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useWhatsApp, WhatsAppConversation, WhatsAppMessage } from "@/hooks/useWhatsApp";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'chat' | 'admin'>('chat');
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('1');
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      text: 'Olá! Gostaria de ver os produtos disponíveis.',
-      timestamp: '2024-01-15T10:30:00Z',
-      isSent: false,
-      isDelivered: true,
-      isRead: true
-    },
-    {
-      id: '2',
-      text: 'Oi! Claro, vou enviar nosso catálogo para você.',
-      timestamp: '2024-01-15T10:31:00Z',
-      isSent: true,
-      isDelivered: true,
-      isRead: true
-    }
-  ]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [whatsappConversations, setWhatsappConversations] = useState<(WhatsAppConversation & { contact: any })[]>([]);
+  const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>([]);
+  
+  const { sendMessage, getConversations, getMessages, loading } = useWhatsApp();
+  const { toast } = useToast();
 
-  const [customers] = useState<Customer[]>([
-    {
-      id: '1',
-      name: 'João Silva',
-      avatar: '',
-      lastMessage: 'Oi! Claro, vou enviar nosso catálogo para você.',
-      timestamp: '2024-01-15T10:31:00Z',
-      isOnline: true,
-      unreadCount: 0,
-      status: 'active'
-    },
-    {
-      id: '2', 
-      name: 'Maria Santos',
-      avatar: '',
-      lastMessage: 'Quando chegará meu pedido?',
-      timestamp: '2024-01-15T09:15:00Z',
-      isOnline: false,
-      unreadCount: 2,
-      status: 'pending'
-    },
-    {
-      id: '3',
-      name: 'Pedro Costa',
-      avatar: '',
-      lastMessage: 'Obrigado! Produto chegou perfeito.',
-      timestamp: '2024-01-14T16:45:00Z',
-      isOnline: false,
-      unreadCount: 0,
-      status: 'completed'
+  // Load WhatsApp conversations on component mount
+  useEffect(() => {
+    const loadConversations = async () => {
+      try {
+        const conversations = await getConversations();
+        setWhatsappConversations(conversations);
+        
+        // Select first conversation if none selected
+        if (conversations.length > 0 && !selectedConversationId) {
+          setSelectedConversationId(conversations[0].id);
+          setSelectedCustomerId(conversations[0].contact?.id);
+        }
+      } catch (error) {
+        console.error('Error loading conversations:', error);
+      }
+    };
+
+    loadConversations();
+  }, [getConversations]);
+
+  // Load messages when conversation changes
+  useEffect(() => {
+    if (selectedConversationId) {
+      const loadMessages = async () => {
+        try {
+          const msgs = await getMessages(selectedConversationId);
+          setWhatsappMessages(msgs);
+          
+          // Convert WhatsApp messages to Message format
+          const convertedMessages: Message[] = msgs.map(msg => ({
+            id: msg.id,
+            text: msg.content,
+            timestamp: msg.timestamp || msg.created_at,
+            isSent: !msg.is_from_contact,
+            isDelivered: msg.status === 'delivered' || msg.status === 'read',
+            isRead: msg.status === 'read',
+            type: msg.message_type === 'text' ? undefined : msg.message_type as any
+          }));
+          
+          setMessages(convertedMessages);
+        } catch (error) {
+          console.error('Error loading messages:', error);
+        }
+      };
+
+      loadMessages();
     }
-  ]);
+  }, [selectedConversationId, getMessages]);
+
+  // Listen for real-time updates
+  useEffect(() => {
+    const channel = supabase
+      .channel('whatsapp_updates')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'whatsapp_messages'
+      }, (payload) => {
+        const newMessage = payload.new as WhatsAppMessage;
+        if (newMessage.conversation_id === selectedConversationId) {
+          const convertedMessage: Message = {
+            id: newMessage.id,
+            text: newMessage.content,
+            timestamp: newMessage.timestamp || newMessage.created_at,
+            isSent: !newMessage.is_from_contact,
+            isDelivered: newMessage.status === 'delivered' || newMessage.status === 'read',
+            isRead: newMessage.status === 'read',
+            type: newMessage.message_type === 'text' ? undefined : newMessage.message_type as any
+          };
+          setMessages(prev => [...prev, convertedMessage]);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedConversationId]);
+
+  // Convert WhatsApp conversations to Customer format
+  const customers: Customer[] = whatsappConversations.map(conv => ({
+    id: conv.contact?.id || conv.id,
+    name: conv.contact?.name || conv.contact?.phone_number || 'Cliente',
+    avatar: conv.contact?.profile_pic_url || '',
+    lastMessage: 'Última mensagem...',
+    timestamp: conv.last_message_at || conv.created_at,
+    isOnline: false, // We don't track online status yet
+    unreadCount: 0, // We don't track unread count yet
+    status: 'active' as const
+  }));
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -75,33 +126,43 @@ const Index = () => {
     scrollToBottom();
   }, [messages]);
 
-  const handleSendMessage = (text: string) => {
-    const newMessage: Message = {
-      id: Date.now().toString(),
-      text,
-      timestamp: new Date().toISOString(),
-      isSent: true,
-      isDelivered: false,
-      isRead: false
-    };
-    setMessages(prev => [...prev, newMessage]);
+  const handleSendMessage = async (text: string) => {
+    if (!selectedCustomer || !selectedConversationId) {
+      toast({
+        title: "Erro",
+        description: "Nenhuma conversa selecionada",
+        variant: "destructive"
+      });
+      return;
+    }
 
-    // Simulate delivery and read status
-    setTimeout(() => {
-      setMessages(prev => prev.map(msg => 
-        msg.id === newMessage.id 
-          ? { ...msg, isDelivered: true }
-          : msg
-      ));
-    }, 1000);
+    // Find the WhatsApp conversation to get the phone number
+    const whatsappConv = whatsappConversations.find(conv => conv.contact?.id === selectedCustomerId);
+    if (!whatsappConv?.contact?.phone_number) {
+      toast({
+        title: "Erro",
+        description: "Número de telefone não encontrado",
+        variant: "destructive"
+      });
+      return;
+    }
 
-    setTimeout(() => {
-      setMessages(prev => prev.map(msg => 
-        msg.id === newMessage.id 
-          ? { ...msg, isRead: true }
-          : msg
-      ));
-    }, 2000);
+    try {
+      // Send via WhatsApp API
+      await sendMessage(whatsappConv.contact.phone_number, text);
+      
+      toast({
+        title: "Mensagem enviada",
+        description: "Sua mensagem foi enviada com sucesso",
+      });
+    } catch (error) {
+      console.error('Error sending message:', error);
+      toast({
+        title: "Erro",
+        description: "Falha ao enviar mensagem",
+        variant: "destructive"
+      });
+    }
   };
 
   const handleSendCatalog = () => {
@@ -165,11 +226,21 @@ const Index = () => {
     <div className="min-h-screen bg-chat-bg flex">
       {/* Customer List - Fixed */}
       <div className="fixed left-0 top-0 h-screen z-10">
-        <CustomerList
-          customers={customers}
-          selectedCustomerId={selectedCustomerId}
-          onSelectCustomer={setSelectedCustomerId}
-        />
+        <div className="flex flex-col h-full">
+          <WhatsAppStatus />
+          <CustomerList
+            customers={customers}
+            selectedCustomerId={selectedCustomerId}
+            onSelectCustomer={(customerId) => {
+              setSelectedCustomerId(customerId);
+              // Find the corresponding conversation ID
+              const conv = whatsappConversations.find(c => c.contact?.id === customerId);
+              if (conv) {
+                setSelectedConversationId(conv.id);
+              }
+            }}
+          />
+        </div>
       </div>
 
       {/* Chat Area */}
