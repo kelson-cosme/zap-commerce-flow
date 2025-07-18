@@ -13,7 +13,7 @@ export const WhatsAppStatus = () => {
     const checkConnection = () => {
       // For now, we'll show as connected since the credentials are configured
       setIsConnected(true);
-      setPhoneNumber('623782354160045');
+      setPhoneNumber('692524603951839');
     };
 
     checkConnection();
@@ -23,7 +23,7 @@ export const WhatsAppStatus = () => {
   }, []);
 
   return (
-    <Card className="p-4 mb-4">
+    <Card className="p-4 mb-4 ">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <MessageCircle className="h-5 w-5 text-green-600" />
@@ -54,11 +54,7 @@ export const WhatsAppStatus = () => {
           )}
         </div>
       </div>
-      {isConnected && (
-        <div className="mt-2 text-xs text-muted-foreground">
-          Webhook URL: https://zxgygqznwmjilnctnoqm.supabase.co/functions/v1/whatsapp-webhook
-        </div>
-      )}
+
     </Card>
   );
 };

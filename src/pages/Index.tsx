@@ -1,3 +1,5 @@
+// File: src/pages/Index.tsx
+
 import { useState, useEffect, useRef } from "react";
 import { ChatHeader } from "@/components/ChatHeader";
 import { MessageBubble, Message } from "@/components/MessageBubble";
@@ -20,7 +22,7 @@ const Index = () => {
   const [whatsappConversations, setWhatsappConversations] = useState<(WhatsAppConversation & { contact: any })[]>([]);
   const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>([]);
   
-  const { sendMessage, getConversations, getMessages, loading } = useWhatsApp();
+  const { sendMessage, sendCatalog, getConversations, getMessages, loading } = useWhatsApp();
   const { toast } = useToast();
 
   // Load WhatsApp conversations on component mount
@@ -136,7 +138,6 @@ const Index = () => {
       return;
     }
 
-    // Find the WhatsApp conversation to get the phone number
     const whatsappConv = whatsappConversations.find(conv => conv.contact?.id === selectedCustomerId);
     if (!whatsappConv?.contact?.phone_number) {
       toast({
@@ -148,9 +149,7 @@ const Index = () => {
     }
 
     try {
-      // Send via WhatsApp API
       await sendMessage(whatsappConv.contact.phone_number, text);
-      
       toast({
         title: "Mensagem enviada",
         description: "Sua mensagem foi enviada com sucesso",
@@ -165,24 +164,40 @@ const Index = () => {
     }
   };
 
-  const handleSendCatalog = () => {
-    const catalogMessage: Message = {
-      id: Date.now().toString(),
-      text: 'Aqui está nosso catálogo de produtos:',
-      timestamp: new Date().toISOString(),
-      isSent: true,
-      type: 'catalog',
-      catalogData: {
-        products: [
-          { id: '1', name: 'Smartphone Galaxy S23', price: 2499.99, image: '/placeholder.svg' },
-          { id: '2', name: 'Notebook Dell Inspiron', price: 3299.00, image: '/placeholder.svg' },
-          { id: '3', name: 'Fone Bluetooth Premium', price: 299.99, image: '/placeholder.svg' },
-          { id: '4', name: 'Tablet iPad Air', price: 1899.00, image: '/placeholder.svg' },
-          { id: '5', name: 'Smartwatch Apple', price: 899.99, image: '/placeholder.svg' }
-        ]
-      }
-    };
-    setMessages(prev => [...prev, catalogMessage]);
+  const handleSendCatalog = async () => {
+    if (!selectedCustomer || !selectedConversationId) {
+      toast({
+        title: "Erro",
+        description: "Nenhuma conversa selecionada",
+        variant: "destructive"
+      });
+      return;
+    }
+  
+    const whatsappConv = whatsappConversations.find(conv => conv.contact?.id === selectedCustomerId);
+    if (!whatsappConv?.contact?.phone_number) {
+      toast({
+        title: "Erro",
+        description: "Número de telefone não encontrado",
+        variant: "destructive"
+      });
+      return;
+    }
+  
+    try {
+      await sendCatalog(whatsappConv.contact.phone_number);
+      toast({
+        title: "Catálogo enviado",
+        description: "O catálogo foi enviado com sucesso para o cliente.",
+      });
+    } catch (error) {
+      console.error('Error sending catalog:', error);
+      toast({
+        title: "Erro",
+        description: "Falha ao enviar o catálogo.",
+        variant: "destructive"
+      });
+    }
   };
 
   const handleSendPayment = () => {
@@ -233,7 +248,6 @@ const Index = () => {
             selectedCustomerId={selectedCustomerId}
             onSelectCustomer={(customerId) => {
               setSelectedCustomerId(customerId);
-              // Find the corresponding conversation ID
               const conv = whatsappConversations.find(c => c.contact?.id === customerId);
               if (conv) {
                 setSelectedConversationId(conv.id);

@@ -1,3 +1,5 @@
+// File: src/hooks/useWhatsApp.ts
+
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -43,7 +45,7 @@ export const useWhatsApp = () => {
 
     try {
       const { data, error } = await supabase.functions.invoke('whatsapp-send', {
-        body: { to, message }
+        body: { to, message, type: 'text' }
       });
 
       if (error) {
@@ -53,6 +55,29 @@ export const useWhatsApp = () => {
       return data;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to send message';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const sendCatalog = useCallback(async (to: string) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('whatsapp-send', {
+        body: { to, type: 'catalog' }
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      return data;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to send catalog';
       setError(errorMessage);
       throw new Error(errorMessage);
     } finally {
@@ -115,6 +140,7 @@ export const useWhatsApp = () => {
 
   return {
     sendMessage,
+    sendCatalog,
     getConversations,
     getMessages,
     loading,
