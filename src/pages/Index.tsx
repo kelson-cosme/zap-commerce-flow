@@ -176,28 +176,30 @@ const Index = () => {
       <div className="flex-1 flex flex-col ml-80">
         {selectedCustomer ? (
           <>
-            {/* Chat Header */}
-            <ChatHeader
-              customerName={selectedCustomer.name}
-              customerAvatar={selectedCustomer.avatar}
-              isOnline={selectedCustomer.isOnline}
-            />
+            {/* Chat Header - Fixed */}
+            <div className="fixed top-0 right-0 left-80 z-10 bg-background border-b">
+              <ChatHeader
+                customerName={selectedCustomer.name}
+                customerAvatar={selectedCustomer.avatar}
+                isOnline={selectedCustomer.isOnline}
+              />
 
-            {/* Admin Button */}
-            <div className="p-2 border-b bg-background">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentView('admin')}
-                className="ml-auto flex items-center gap-2"
-              >
-                <BarChart3 className="h-4 w-4" />
-                Painel Admin
-              </Button>
+              {/* Admin Button */}
+              <div className="p-2 border-b bg-background">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentView('admin')}
+                  className="ml-auto flex items-center gap-2"
+                >
+                  <BarChart3 className="h-4 w-4" />
+                  Painel Admin
+                </Button>
+              </div>
             </div>
 
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+            {/* Messages - with top margin for fixed header */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2 mt-32">
               {messages.map((message) => (
                 <MessageBubble key={message.id} message={message} />
               ))}
