@@ -138,6 +138,29 @@ export const useWhatsApp = () => {
       setLoading(false);
     }
   }, []);
+  
+const addProductToCatalog = useCallback(async (product: { name: string; description: string; price: number; image_url: string; retailer_id: string; }) => {
+  setLoading(true);
+  setError(null);
+
+  try {
+    const { data, error } = await supabase.functions.invoke('whatsapp-add-product', {
+      body: product
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data;
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'Failed to add product to catalog';
+    setError(errorMessage);
+    throw new Error(errorMessage);
+  } finally {
+    setLoading(false);
+  }
+}, []);
 
   // --- CORREÇÃO NO RETURN PARA INCLUIR sendCatalog ---
   return {
@@ -145,6 +168,7 @@ export const useWhatsApp = () => {
     sendCatalog,
     getConversations,
     getMessages,
+    addProductToCatalog, // Adicione aqui
     loading,
     error,
   };

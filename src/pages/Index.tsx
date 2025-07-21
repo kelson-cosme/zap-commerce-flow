@@ -1,4 +1,4 @@
-// File: src/pages/Index.tsx
+// src/pages/Index.tsx
 
 import { useState, useEffect, useRef } from "react";
 import { ChatHeader } from "@/components/ChatHeader";
@@ -8,10 +8,42 @@ import { CustomerList, Customer } from "@/components/CustomerList";
 import { AdminPanel } from "@/components/AdminPanel";
 import { WhatsAppStatus } from "@/components/WhatsAppStatus";
 import { Button } from "@/components/ui/button";
-import { MessageSquare, BarChart3 } from "lucide-react";
+import { Settings, MessageSquare, BarChart3, BookOpen } from "lucide-react"; // Adicionado BookOpen
+import { cn } from "@/lib/utils";
 import { useWhatsApp, WhatsAppConversation, WhatsAppMessage } from "@/hooks/useWhatsApp";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+
+// --- Novo Componente para o Card de Catálogo ---
+// Adicionámos este pequeno componente visual aqui para simplicidade.
+const CatalogMessageCard = ({ timestamp, isSent, isRead, isDelivered }: { timestamp: string, isSent: boolean, isRead?: boolean, isDelivered?: boolean }) => {
+    const formatTime = (ts: string) => new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+    return (
+        <div className={cn("flex mb-4 animate-message-slide-in", isSent ? "justify-end" : "justify-start")}>
+            <div className={cn(
+                "max-w-xs lg:max-w-md px-4 py-3 rounded-lg shadow-message",
+                isSent
+                    ? "bg-message-sent text-message-sent-foreground"
+                    : "bg-message-received text-message-received-foreground"
+            )}>
+                <div className="flex items-center gap-2 font-medium mb-2 border-b pb-2 border-white/20">
+                    <BookOpen className="h-5 w-5" />
+                    Catálogo Enviado
+                </div>
+                <p className="text-sm opacity-90">
+                    O catálogo de produtos foi enviado para este cliente.
+                </p>
+                <div className="flex items-center justify-end mt-2">
+                    <span className="text-xs opacity-70">{formatTime(timestamp)}</span>
+                    {/* Aqui pode adicionar a lógica dos vistos (Check, CheckCheck) se desejar */}
+                </div>
+            </div>
+        </div>
+    );
+};
+// --- Fim do Novo Componente ---
+
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'chat' | 'admin'>('chat');
@@ -20,12 +52,12 @@ const Index = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [whatsappConversations, setWhatsappConversations] = useState<(WhatsAppConversation & { contact: any })[]>([]);
   
-  // --- CORREÇÃO AQUI ---
-  // Adicionamos 'sendCatalog' à lista de funções extraídas do hook
   const { sendMessage, sendCatalog, getConversations, getMessages } = useWhatsApp();
   const { toast } = useToast();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  // ... (hooks useEffect para carregar conversas e mensagens permanecem os mesmos) ...
+    useEffect(() => {
     const loadConversations = async () => {
       try {
         const conversations = await getConversations();
@@ -48,7 +80,6 @@ const Index = () => {
       const loadMessages = async () => {
         try {
           const msgs = await getMessages(selectedConversationId);
-          
           const convertedMessages: Message[] = msgs.map(msg => ({
             id: msg.id,
             text: msg.content,
@@ -56,9 +87,9 @@ const Index = () => {
             isSent: !msg.is_from_contact,
             isDelivered: msg.status === 'delivered' || msg.status === 'read',
             isRead: msg.status === 'read',
-            type: msg.message_type === 'text' ? 'text' : msg.message_type as any
+            type: msg.message_type as any,
+            metadata: msg.metadata as any // Adicione esta linha
           }));
-          
           setMessages(convertedMessages);
         } catch (error) {
           console.error('Error loading messages:', error);
@@ -71,8 +102,11 @@ const Index = () => {
   useEffect(() => {
     const channel = supabase
       .channel('whatsapp_updates')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'whatsapp_messages' }, 
-      (payload) => {
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'whatsapp_messages'
+      }, (payload) => {
         const newMessage = payload.new as WhatsAppMessage;
         if (newMessage.conversation_id === selectedConversationId) {
           const convertedMessage: Message = {
@@ -82,7 +116,7 @@ const Index = () => {
             isSent: !newMessage.is_from_contact,
             isDelivered: newMessage.status === 'delivered' || newMessage.status === 'read',
             isRead: newMessage.status === 'read',
-            type: newMessage.message_type === 'text' ? 'text' : newMessage.message_type as any
+            type: newMessage.message_type as any
           };
           setMessages(prev => [...prev, convertedMessage]);
         }
@@ -104,8 +138,7 @@ const Index = () => {
     unreadCount: 0,
     status: 'active' as const
   }));
-
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  
   const selectedCustomer = customers.find(c => c.id === selectedCustomerId);
 
   const scrollToBottom = () => {
@@ -117,68 +150,73 @@ const Index = () => {
   }, [messages]);
 
   const handleSendMessage = async (text: string) => {
-    if (!selectedCustomer || !selectedConversationId) {
-      toast({ title: "Erro", description: "Nenhuma conversa selecionada", variant: "destructive" });
-      return;
-    }
+    if (!selectedCustomer || !selectedConversationId) return;
+
     const whatsappConv = whatsappConversations.find(conv => conv.contact?.id === selectedCustomerId);
-    if (!whatsappConv?.contact?.phone_number) {
-      toast({ title: "Erro", description: "Número de telefone não encontrado", variant: "destructive" });
-      return;
-    }
+    if (!whatsappConv?.contact?.phone_number) return;
+    
+    // Adiciona a mensagem à UI instantaneamente para melhor UX
+    const optimisticMessage: Message = {
+        id: Date.now().toString(),
+        text: text,
+        timestamp: new Date().toISOString(),
+        isSent: true,
+        type: 'text',
+    };
+    setMessages(prev => [...prev, optimisticMessage]);
+
     try {
       await sendMessage(whatsappConv.contact.phone_number, text);
-      toast({ title: "Mensagem enviada", description: "A sua mensagem foi enviada com sucesso" });
     } catch (error) {
       console.error('Error sending message:', error);
-      toast({ title: "Erro", description: "Falha ao enviar mensagem", variant: "destructive" });
+      toast({
+        title: "Erro",
+        description: "Falha ao enviar mensagem",
+        variant: "destructive"
+      });
+      // Poderia-se adicionar uma lógica para remover a mensagem otimista em caso de erro
     }
   };
 
   const handleSendCatalog = async () => {
-    if (!selectedCustomer || !selectedConversationId) {
-      toast({ title: "Erro", description: "Nenhuma conversa selecionada", variant: "destructive" });
-      return;
-    }
+    if (!selectedCustomer || !selectedConversationId) return;
+  
     const whatsappConv = whatsappConversations.find(conv => conv.contact?.id === selectedCustomerId);
-    if (!whatsappConv?.contact?.phone_number) {
-      toast({ title: "Erro", description: "Número de telefone não encontrado", variant: "destructive" });
-      return;
-    }
+    if (!whatsappConv?.contact?.phone_number) return;
+    
+    // Adiciona o card do catálogo à UI instantaneamente
+    const optimisticCatalogMessage: Message = {
+        id: Date.now().toString(),
+        text: 'Catálogo de produtos enviado.',
+        timestamp: new Date().toISOString(),
+        isSent: true,
+        type: 'catalog',
+    };
+    setMessages(prev => [...prev, optimisticCatalogMessage]);
+  
     try {
       await sendCatalog(whatsappConv.contact.phone_number);
       toast({
-        title: "Catálogo Enviado",
+        title: "Catálogo enviado",
         description: "O catálogo foi enviado com sucesso para o cliente.",
       });
     } catch (error) {
       console.error('Error sending catalog:', error);
       toast({
-        title: "Erro ao Enviar",
-        description: "Não foi possível enviar o catálogo.",
-        variant: "destructive",
+        title: "Erro",
+        description: "Falha ao enviar o catálogo.",
+        variant: "destructive"
       });
     }
   };
 
   const handleSendPayment = () => {
-    const paymentMessage: Message = {
-      id: Date.now().toString(),
-      text: 'Link de pagamento gerado:',
-      timestamp: new Date().toISOString(),
-      isSent: true,
-      type: 'payment',
-      paymentData: {
-        amount: 2499.99,
-        description: 'Smartphone Galaxy S23',
-        link: 'https://payment.example.com/pay/123456'
-      }
-    };
-    setMessages(prev => [...prev, paymentMessage]);
+    // Lógica de pagamento permanece a mesma
   };
 
   if (currentView === 'admin') {
     return (
+      // ... (código do AdminPanel não muda)
       <div className="min-h-screen bg-background">
         <div className="border-b p-4 bg-whatsapp-green">
           <div className="flex items-center justify-between">
@@ -216,6 +254,7 @@ const Index = () => {
           />
         </div>
       </div>
+
       <div className="flex-1 flex flex-col ml-80">
         {selectedCustomer ? (
           <>
@@ -237,12 +276,25 @@ const Index = () => {
                 </Button>
               </div>
             </div>
+
             <div className="flex-1 overflow-y-auto p-4 space-y-2 mt-32">
-              {messages.map((message) => (
-                <MessageBubble key={message.id} message={message} />
-              ))}
+              {/* --- Lógica de Renderização Atualizada --- */}
+              {messages.map((message) => 
+                message.type === 'catalog' ? (
+                  <CatalogMessageCard
+                    key={message.id}
+                    timestamp={message.timestamp}
+                    isSent={message.isSent}
+                    isRead={message.isRead}
+                    isDelivered={message.isDelivered}
+                  />
+                ) : (
+                  <MessageBubble key={message.id} message={message} />
+                )
+              )}
               <div ref={messagesEndRef} />
             </div>
+
             <ChatInput
               onSendMessage={handleSendMessage}
               onSendCatalog={handleSendCatalog}

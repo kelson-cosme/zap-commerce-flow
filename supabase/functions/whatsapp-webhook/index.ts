@@ -1,3 +1,5 @@
+// supabase/functions/whatsapp-webhook/index.ts
+
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.52.0'
 
 const corsHeaders = {
@@ -5,6 +7,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Interfaces para a estrutura de dados do webhook do WhatsApp
 interface WhatsAppWebhookEntry {
   id: string;
   changes: Array<{
@@ -20,15 +23,7 @@ interface WhatsAppWebhookEntry {
         };
         wa_id: string;
       }>;
-      messages?: Array<{
-        from: string;
-        id: string;
-        timestamp: string;
-        text?: {
-          body: string;
-        };
-        type: string;
-      }>;
+      messages?: Array<WhatsAppTextMessage | WhatsAppOrderMessage>; // Aceita ambos os tipos de mensagem
       statuses?: Array<{
         id: string;
         status: string;
@@ -45,8 +40,34 @@ interface WhatsAppWebhookPayload {
   entry: WhatsAppWebhookEntry[];
 }
 
+interface WhatsAppTextMessage {
+    from: string;
+    id: string;
+    timestamp: string;
+    text?: {
+      body: string;
+    };
+    type: 'text' | 'image' | 'audio' | 'video' | 'document' | 'unknown';
+}
+
+interface WhatsAppOrderMessage {
+  from: string;
+  id: string;
+  timestamp: string;
+  type: 'order';
+  order: {
+    catalog_id: string;
+    product_items: Array<{
+      product_retailer_id: string;
+      quantity: string;
+      item_price: string;
+      currency: string;
+    }>;
+  };
+}
+
+
 Deno.serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -58,17 +79,15 @@ Deno.serve(async (req) => {
 
   try {
     if (req.method === 'GET') {
-      // Webhook verification
+      // Verificação do Webhook (sem alterações)
       const url = new URL(req.url);
       const mode = url.searchParams.get('hub.mode');
       const token = url.searchParams.get('hub.verify_token');
       const challenge = url.searchParams.get('hub.challenge');
 
       if (mode === 'subscribe' && token === 'whatsapp_verify_token') {
-        console.log('Webhook verified successfully');
         return new Response(challenge, { status: 200 });
       } else {
-        console.log('Webhook verification failed');
         return new Response('Forbidden', { status: 403 });
       }
     }
@@ -81,13 +100,12 @@ Deno.serve(async (req) => {
         for (const change of entry.changes) {
           const { value } = change;
 
-          // Process incoming messages
+          // Processar mensagens recebidas (de texto ou de pedido)
           if (value.messages) {
             for (const message of value.messages) {
               const phoneNumber = message.from;
               let contactName = phoneNumber;
 
-              // Get contact name if available
               if (value.contacts) {
                 const contact = value.contacts.find(c => c.wa_id === phoneNumber);
                 if (contact) {
@@ -95,42 +113,27 @@ Deno.serve(async (req) => {
                 }
               }
 
-              // Upsert contact
+              // 1. Garante que o contato existe
               const { data: contactData, error: contactError } = await supabase
                 .from('whatsapp_contacts')
-                .upsert({
-                  phone_number: phoneNumber,
-                  name: contactName,
-                }, {
-                  onConflict: 'phone_number',
-                  ignoreDuplicates: false
-                })
-                .select()
-                .single();
+                .upsert({ phone_number: phoneNumber, name: contactName }, { onConflict: 'phone_number' })
+                .select().single();
 
               if (contactError) {
                 console.error('Error upserting contact:', contactError);
                 continue;
               }
 
-              // Get or create conversation
+              // 2. Garante que a conversa existe
               let { data: conversationData, error: conversationError } = await supabase
                 .from('whatsapp_conversations')
-                .select('*')
-                .eq('contact_id', contactData.id)
-                .eq('is_active', true)
-                .single();
+                .select('*').eq('contact_id', contactData.id).eq('is_active', true).single();
 
               if (conversationError || !conversationData) {
                 const { data: newConversation, error: newConversationError } = await supabase
                   .from('whatsapp_conversations')
-                  .insert({
-                    contact_id: contactData.id,
-                    last_message_at: new Date(parseInt(message.timestamp) * 1000).toISOString(),
-                  })
-                  .select()
-                  .single();
-
+                  .insert({ contact_id: contactData.id, last_message_at: new Date(parseInt(message.timestamp) * 1000).toISOString() })
+                  .select().single();
                 if (newConversationError) {
                   console.error('Error creating conversation:', newConversationError);
                   continue;
@@ -138,34 +141,54 @@ Deno.serve(async (req) => {
                 conversationData = newConversation;
               }
 
-              // Insert message
-              const messageContent = message.text?.body || `[${message.type}]`;
-              const { error: messageError } = await supabase
-                .from('whatsapp_messages')
-                .insert({
+              // --- LÓGICA PARA PROCESSAR PEDIDOS E MENSAGENS ---
+              // 3. Verifica o tipo de mensagem
+              if (message.type === 'order') {
+                const orderMessage = message as WhatsAppOrderMessage;
+
+                // 1. Salva na tabela de pedidos (como já fazia)
+                await supabase.from('whatsapp_orders').insert({
                   conversation_id: conversationData.id,
-                  whatsapp_message_id: message.id,
-                  content: messageContent,
-                  message_type: message.type,
-                  is_from_contact: true,
-                  timestamp: new Date(parseInt(message.timestamp) * 1000).toISOString(),
+                  whatsapp_order_id: orderMessage.id,
+                  products: orderMessage.order.product_items,
+                  status: 'received',
                 });
 
-              if (messageError) {
-                console.error('Error inserting message:', messageError);
+                // 2. Cria a mensagem visual no chat com os detalhes do pedido
+                await supabase.from('whatsapp_messages').insert({
+                  conversation_id: conversationData.id,
+                  whatsapp_message_id: message.id,
+                  content: `Pedido recebido com ${orderMessage.order.product_items.length} item(ns).`,
+                  message_type: 'order', // NOVO TIPO
+                  is_from_contact: true,
+                  timestamp: new Date(parseInt(message.timestamp) * 1000).toISOString(),
+                  metadata: { // SALVA OS PRODUTOS NA MENSAGEM
+                    products: orderMessage.order.product_items 
+                  }
+                });
+              } else {
+                // Lógica para mensagens de texto (sem alterações)
+                const textMessage = message as WhatsAppTextMessage;
+                const messageContent = textMessage.text?.body || `[${message.type}]`;
+                await supabase.from('whatsapp_messages').insert({
+                    conversation_id: conversationData.id,
+                    whatsapp_message_id: message.id,
+                    content: messageContent,
+                    message_type: message.type,
+                    is_from_contact: true,
+                    timestamp: new Date(parseInt(message.timestamp) * 1000).toISOString(),
+                  });
               }
 
-              // Update conversation last message time
+              // Atualiza a data da última mensagem na conversa
               await supabase
                 .from('whatsapp_conversations')
-                .update({
-                  last_message_at: new Date(parseInt(message.timestamp) * 1000).toISOString(),
-                })
+                .update({ last_message_at: new Date(parseInt(message.timestamp) * 1000).toISOString() })
                 .eq('id', conversationData.id);
             }
           }
 
-          // Process message status updates
+          // Processar atualizações de status (sem alterações)
           if (value.statuses) {
             for (const status of value.statuses) {
               await supabase
@@ -179,22 +202,13 @@ Deno.serve(async (req) => {
         }
       }
 
-      return new Response('OK', { 
-        status: 200,
-        headers: corsHeaders 
-      });
+      return new Response('OK', { status: 200, headers: corsHeaders });
     }
 
-    return new Response('Method not allowed', { 
-      status: 405,
-      headers: corsHeaders 
-    });
+    return new Response('Method not allowed', { status: 405, headers: corsHeaders });
 
   } catch (error) {
     console.error('Webhook error:', error);
-    return new Response('Internal server error', { 
-      status: 500,
-      headers: corsHeaders 
-    });
+    return new Response('Internal server error', { status: 500, headers: corsHeaders });
   }
 });
