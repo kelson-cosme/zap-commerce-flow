@@ -8,41 +8,28 @@ import { CustomerList, Customer } from "@/components/CustomerList";
 import { AdminPanel } from "@/components/AdminPanel";
 import { WhatsAppStatus } from "@/components/WhatsAppStatus";
 import { Button } from "@/components/ui/button";
-import { Settings, MessageSquare, BarChart3, BookOpen } from "lucide-react"; // Adicionado BookOpen
+import { MessageSquare, BarChart3, BookOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useWhatsApp, WhatsAppConversation, WhatsAppMessage } from "@/hooks/useWhatsApp";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
-// --- Novo Componente para o Card de Catálogo ---
-// Adicionámos este pequeno componente visual aqui para simplicidade.
-const CatalogMessageCard = ({ timestamp, isSent, isRead, isDelivered }: { timestamp: string, isSent: boolean, isRead?: boolean, isDelivered?: boolean }) => {
+// Este componente visual é usado para mostrar a mensagem de "Catálogo Enviado"
+const CatalogSentCard = ({ timestamp, isSent }: { timestamp: string, isSent: boolean }) => {
     const formatTime = (ts: string) => new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-
     return (
         <div className={cn("flex mb-4 animate-message-slide-in", isSent ? "justify-end" : "justify-start")}>
-            <div className={cn(
-                "max-w-xs lg:max-w-md px-4 py-3 rounded-lg shadow-message",
-                isSent
-                    ? "bg-message-sent text-message-sent-foreground"
-                    : "bg-message-received text-message-received-foreground"
-            )}>
-                <div className="flex items-center gap-2 font-medium mb-2 border-b pb-2 border-white/20">
+            <div className={cn("max-w-xs lg:max-w-md px-4 py-3 rounded-lg shadow-message", isSent ? "bg-message-sent text-message-sent-foreground" : "bg-message-received text-message-received-foreground")}>
+                <div className="flex items-center gap-3 font-medium mb-2 border-b pb-2 border-white/20">
                     <BookOpen className="h-5 w-5" />
-                    Catálogo Enviado
+                    <h4 className="font-semibold">Catálogo Enviado</h4>
                 </div>
-                <p className="text-sm opacity-90">
-                    O catálogo de produtos foi enviado para este cliente.
-                </p>
-                <div className="flex items-center justify-end mt-2">
-                    <span className="text-xs opacity-70">{formatTime(timestamp)}</span>
-                    {/* Aqui pode adicionar a lógica dos vistos (Check, CheckCheck) se desejar */}
-                </div>
+                <p className="text-sm opacity-90">Você enviou o catálogo de produtos para este cliente.</p>
+                <div className="flex items-center justify-end mt-2"><span className="text-xs opacity-70">{formatTime(timestamp)}</span></div>
             </div>
         </div>
     );
 };
-// --- Fim do Novo Componente ---
 
 
 const Index = () => {
@@ -56,22 +43,17 @@ const Index = () => {
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // ... (hooks useEffect para carregar conversas e mensagens permanecem os mesmos) ...
-    useEffect(() => {
+  useEffect(() => {
     const loadConversations = async () => {
       try {
         const conversations = await getConversations();
         setWhatsappConversations(conversations);
-        
         if (conversations.length > 0 && !selectedConversationId) {
           setSelectedConversationId(conversations[0].id);
           setSelectedCustomerId(conversations[0].contact?.id);
         }
-      } catch (error) {
-        console.error('Error loading conversations:', error);
-      }
+      } catch (error) { console.error('Error loading conversations:', error); }
     };
-
     loadConversations();
   }, [getConversations, selectedConversationId]);
 
@@ -88,25 +70,18 @@ const Index = () => {
             isDelivered: msg.status === 'delivered' || msg.status === 'read',
             isRead: msg.status === 'read',
             type: msg.message_type as any,
-            metadata: msg.metadata as any // Adicione esta linha
+            metadata: msg.metadata as any
           }));
           setMessages(convertedMessages);
-        } catch (error) {
-          console.error('Error loading messages:', error);
-        }
+        } catch (error) { console.error('Error loading messages:', error); }
       };
       loadMessages();
     }
   }, [selectedConversationId, getMessages]);
 
   useEffect(() => {
-    const channel = supabase
-      .channel('whatsapp_updates')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'whatsapp_messages'
-      }, (payload) => {
+    const channel = supabase.channel('whatsapp_updates').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'whatsapp_messages' },
+      (payload) => {
         const newMessage = payload.new as WhatsAppMessage;
         if (newMessage.conversation_id === selectedConversationId) {
           const convertedMessage: Message = {
@@ -116,16 +91,14 @@ const Index = () => {
             isSent: !newMessage.is_from_contact,
             isDelivered: newMessage.status === 'delivered' || newMessage.status === 'read',
             isRead: newMessage.status === 'read',
-            type: newMessage.message_type as any
+            type: newMessage.message_type as any,
+            metadata: newMessage.metadata as any
           };
           setMessages(prev => [...prev, convertedMessage]);
         }
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+      }
+    ).subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, [selectedConversationId]);
 
   const customers: Customer[] = whatsappConversations.map(conv => ({
@@ -141,21 +114,14 @@ const Index = () => {
   
   const selectedCustomer = customers.find(c => c.id === selectedCustomerId);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+  const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); };
+  useEffect(() => { scrollToBottom(); }, [messages]);
 
   const handleSendMessage = async (text: string) => {
     if (!selectedCustomer || !selectedConversationId) return;
-
     const whatsappConv = whatsappConversations.find(conv => conv.contact?.id === selectedCustomerId);
     if (!whatsappConv?.contact?.phone_number) return;
     
-    // Adiciona a mensagem à UI instantaneamente para melhor UX
     const optimisticMessage: Message = {
         id: Date.now().toString(),
         text: text,
@@ -164,27 +130,26 @@ const Index = () => {
         type: 'text',
     };
     setMessages(prev => [...prev, optimisticMessage]);
-
     try {
       await sendMessage(whatsappConv.contact.phone_number, text);
     } catch (error) {
       console.error('Error sending message:', error);
-      toast({
-        title: "Erro",
-        description: "Falha ao enviar mensagem",
-        variant: "destructive"
-      });
-      // Poderia-se adicionar uma lógica para remover a mensagem otimista em caso de erro
+      toast({ title: "Erro", description: "Falha ao enviar mensagem", variant: "destructive" });
     }
   };
 
   const handleSendCatalog = async () => {
-    if (!selectedCustomer || !selectedConversationId) return;
+    if (!selectedCustomer || !selectedConversationId) {
+      toast({ title: "Erro", description: "Nenhuma conversa selecionada", variant: "destructive" });
+      return;
+    }
   
     const whatsappConv = whatsappConversations.find(conv => conv.contact?.id === selectedCustomerId);
-    if (!whatsappConv?.contact?.phone_number) return;
-    
-    // Adiciona o card do catálogo à UI instantaneamente
+    if (!whatsappConv?.contact?.phone_number) {
+      toast({ title: "Erro", description: "Número de telefone não encontrado", variant: "destructive" });
+      return;
+    }
+  
     const optimisticCatalogMessage: Message = {
         id: Date.now().toString(),
         text: 'Catálogo de produtos enviado.',
@@ -196,36 +161,24 @@ const Index = () => {
   
     try {
       await sendCatalog(whatsappConv.contact.phone_number);
-      toast({
-        title: "Catálogo enviado",
-        description: "O catálogo foi enviado com sucesso para o cliente.",
-      });
+      toast({ title: "Catálogo enviado", description: "O catálogo foi enviado com sucesso para o cliente." });
     } catch (error) {
       console.error('Error sending catalog:', error);
-      toast({
-        title: "Erro",
-        description: "Falha ao enviar o catálogo.",
-        variant: "destructive"
-      });
+      toast({ title: "Erro", description: "Falha ao enviar o catálogo.", variant: "destructive" });
     }
   };
 
   const handleSendPayment = () => {
-    // Lógica de pagamento permanece a mesma
+    // A sua lógica de pagamento aqui
   };
 
   if (currentView === 'admin') {
     return (
-      // ... (código do AdminPanel não muda)
       <div className="min-h-screen bg-background">
         <div className="border-b p-4 bg-whatsapp-green">
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-semibold text-white">Painel Administrativo</h1>
-            <Button
-              variant="ghost"
-              onClick={() => setCurrentView('chat')}
-              className="text-white hover:bg-whatsapp-green-dark"
-            >
+            <Button variant="ghost" onClick={() => setCurrentView('chat')} className="text-white hover:bg-whatsapp-green-dark">
               <MessageSquare className="h-5 w-5 mr-2" />
               Voltar ao Chat
             </Button>
@@ -247,14 +200,11 @@ const Index = () => {
             onSelectCustomer={(customerId) => {
               setSelectedCustomerId(customerId);
               const conv = whatsappConversations.find(c => c.contact?.id === customerId);
-              if (conv) {
-                setSelectedConversationId(conv.id);
-              }
+              if (conv) { setSelectedConversationId(conv.id); }
             }}
           />
         </div>
       </div>
-
       <div className="flex-1 flex flex-col ml-80">
         {selectedCustomer ? (
           <>
@@ -265,36 +215,22 @@ const Index = () => {
                 isOnline={selectedCustomer.isOnline}
               />
               <div className="p-2 border-b bg-background">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentView('admin')}
-                  className="ml-auto flex items-center gap-2"
-                >
+                <Button variant="outline" size="sm" onClick={() => setCurrentView('admin')} className="ml-auto flex items-center gap-2">
                   <BarChart3 className="h-4 w-4" />
                   Painel Admin
                 </Button>
               </div>
             </div>
-
             <div className="flex-1 overflow-y-auto p-4 space-y-2 mt-32">
-              {/* --- Lógica de Renderização Atualizada --- */}
-              {messages.map((message) => 
-                message.type === 'catalog' ? (
-                  <CatalogMessageCard
-                    key={message.id}
-                    timestamp={message.timestamp}
-                    isSent={message.isSent}
-                    isRead={message.isRead}
-                    isDelivered={message.isDelivered}
-                  />
-                ) : (
-                  <MessageBubble key={message.id} message={message} />
-                )
-              )}
+              {messages.map((message) => {
+                if (message.type === 'catalog' && message.isSent) {
+                  return <CatalogSentCard key={message.id} timestamp={message.timestamp} isSent={message.isSent} />;
+                }
+                // A MessageBubble já contém a lógica para renderizar pedidos ('order')
+                return <MessageBubble key={message.id} message={message} />;
+              })}
               <div ref={messagesEndRef} />
             </div>
-
             <ChatInput
               onSendMessage={handleSendMessage}
               onSendCatalog={handleSendCatalog}

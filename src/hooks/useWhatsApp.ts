@@ -1,4 +1,4 @@
-// File: src/hooks/useWhatsApp.ts
+// src/hooks/useWhatsApp.ts
 
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
@@ -33,7 +33,21 @@ export interface WhatsAppMessage {
   timestamp: string | null;
   created_at: string;
   updated_at: string;
+  metadata?: any;
 }
+
+// A interface da mensagem para o frontend, usada no Index.tsx
+export interface Message {
+    id: string;
+    text: string;
+    timestamp: string;
+    isSent: boolean;
+    isDelivered?: boolean;
+    isRead?: boolean;
+    type?: 'text' | 'catalog' | 'payment' | 'order' | 'system';
+    metadata?: any;
+}
+
 
 export const useWhatsApp = () => {
   const [loading, setLoading] = useState(false);
@@ -42,16 +56,11 @@ export const useWhatsApp = () => {
   const sendMessage = useCallback(async (to: string, message: string) => {
     setLoading(true);
     setError(null);
-
     try {
       const { data, error } = await supabase.functions.invoke('whatsapp-send', {
         body: { to, message, type: 'text' }
       });
-
-      if (error) {
-        throw new Error(error.message);
-      }
-
+      if (error) throw new Error(error.message);
       return data;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to send message';
@@ -62,23 +71,36 @@ export const useWhatsApp = () => {
     }
   }, []);
 
-  // --- FUNÇÃO FALTANTE ADICIONADA AQUI ---
   const sendCatalog = useCallback(async (to: string) => {
     setLoading(true);
     setError(null);
-
     try {
+      // Esta chamada é crucial. Ela deve enviar o tipo 'catalog'.
       const { data, error } = await supabase.functions.invoke('whatsapp-send', {
         body: { to, type: 'catalog' }
       });
-
-      if (error) {
-        throw new Error(error.message);
-      }
-
+      if (error) throw new Error(error.message);
       return data;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to send catalog';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  
+  const addProductToCatalog = useCallback(async (product: { name: string; description: string; price: number; image_url: string; retailer_id: string; }) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('whatsapp-add-product', {
+        body: product
+      });
+      if (error) throw new Error(error.message);
+      return data;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to add product to catalog';
       setError(errorMessage);
       throw new Error(errorMessage);
     } finally {
@@ -89,21 +111,13 @@ export const useWhatsApp = () => {
   const getConversations = useCallback(async () => {
     setLoading(true);
     setError(null);
-
     try {
       const { data, error } = await supabase
         .from('whatsapp_conversations')
-        .select(`
-          *,
-          contact:whatsapp_contacts(*)
-        `)
+        .select(`*, contact:whatsapp_contacts(*)`)
         .eq('is_active', true)
         .order('last_message_at', { ascending: false });
-
-      if (error) {
-        throw new Error(error.message);
-      }
-
+      if (error) throw new Error(error.message);
       return data as (WhatsAppConversation & { contact: WhatsAppContact })[];
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch conversations';
@@ -117,18 +131,13 @@ export const useWhatsApp = () => {
   const getMessages = useCallback(async (conversationId: string) => {
     setLoading(true);
     setError(null);
-
     try {
       const { data, error } = await supabase
         .from('whatsapp_messages')
         .select('*')
         .eq('conversation_id', conversationId)
         .order('timestamp', { ascending: true });
-
-      if (error) {
-        throw new Error(error.message);
-      }
-
+      if (error) throw new Error(error.message);
       return data as WhatsAppMessage[];
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch messages';
@@ -138,37 +147,13 @@ export const useWhatsApp = () => {
       setLoading(false);
     }
   }, []);
-  
-const addProductToCatalog = useCallback(async (product: { name: string; description: string; price: number; image_url: string; retailer_id: string; }) => {
-  setLoading(true);
-  setError(null);
 
-  try {
-    const { data, error } = await supabase.functions.invoke('whatsapp-add-product', {
-      body: product
-    });
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    return data;
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : 'Failed to add product to catalog';
-    setError(errorMessage);
-    throw new Error(errorMessage);
-  } finally {
-    setLoading(false);
-  }
-}, []);
-
-  // --- CORREÇÃO NO RETURN PARA INCLUIR sendCatalog ---
   return {
     sendMessage,
     sendCatalog,
+    addProductToCatalog,
     getConversations,
     getMessages,
-    addProductToCatalog, // Adicione aqui
     loading,
     error,
   };

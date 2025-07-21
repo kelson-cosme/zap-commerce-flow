@@ -13,7 +13,7 @@ export const WhatsAppStatus = () => {
     const checkConnection = () => {
       // For now, we'll show as connected since the credentials are configured
       setIsConnected(true);
-      setPhoneNumber('623782354160045');
+      setPhoneNumber('692524603951839');
     };
 
     checkConnection();
@@ -23,7 +23,7 @@ export const WhatsAppStatus = () => {
   }, []);
 
   return (
-    <Card className="p-4 mb-4 fixed bottom-0" >
+    <Card className="p-4 mb-4 fixed bottom-0">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <MessageCircle className="h-5 w-5 text-green-600" />
@@ -50,7 +50,7 @@ export const WhatsAppStatus = () => {
           )}
         </div>
       </div>
-     
+
     </Card>
   );
 };
