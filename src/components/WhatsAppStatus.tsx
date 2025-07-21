@@ -23,17 +23,13 @@ export const WhatsAppStatus = () => {
   }, []);
 
   return (
-    <Card className="p-4 mb-4">
+    <Card className="p-4 mb-4 fixed bottom-0" >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <MessageCircle className="h-5 w-5 text-green-600" />
           <div>
             <h3 className="font-semibold text-sm">WhatsApp Business</h3>
-            {phoneNumber && (
-              <p className="text-xs text-muted-foreground">
-                Número: {phoneNumber}
-              </p>
-            )}
+
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -54,11 +50,7 @@ export const WhatsAppStatus = () => {
           )}
         </div>
       </div>
-      {isConnected && (
-        <div className="mt-2 text-xs text-muted-foreground">
-          Webhook URL: https://zxgygqznwmjilnctnoqm.supabase.co/functions/v1/whatsapp-webhook
-        </div>
-      )}
+     
     </Card>
   );
 };
