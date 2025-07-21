@@ -1,6 +1,8 @@
+// src/components/MessageBubble.tsx
+
 import { cn } from "@/lib/utils";
-import { Check, CheckCheck, ShoppingCart, BookOpen } from "lucide-react"; // Adicionado ShoppingCart e BookOpen
-import { Button } from "@/components/ui/button"; // Importado o Button
+import { Check, CheckCheck, ShoppingCart, BookOpen } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export interface Message {
   id: string;
@@ -9,7 +11,7 @@ export interface Message {
   isSent: boolean;
   isDelivered?: boolean;
   isRead?: boolean;
-  type?: 'text' | 'catalog' | 'payment' | 'order' | 'system'; // Adicionado 'order' e 'system'
+  type?: 'text' | 'catalog' | 'payment' | 'order' | 'system';
   catalogData?: {
     products: Array<{
       id: string;
@@ -23,21 +25,23 @@ export interface Message {
     description: string;
     link: string;
   };
-  metadata?: { // Adicionada a propriedade metadata
+  metadata?: {
     products?: Array<{
       product_retailer_id: string;
       quantity: string;
       item_price: string;
       currency: string;
     }>;
+    orderId?: string; // ID do pedido na nossa base de dados
   };
 }
 
 interface MessageBubbleProps {
   message: Message;
+  onViewOrder?: (orderId: string) => void; // Prop para a função de clique
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+export function MessageBubble({ message, onViewOrder }: MessageBubbleProps) {
   const formatTime = (timestamp: string) => {
     return new Date(timestamp).toLocaleTimeString('pt-BR', {
       hour: '2-digit',
@@ -45,7 +49,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
     });
   };
 
-  // Renderizador para mensagens de CATÁLOGO ENVIADO
+  // Renderizador para mensagens de CATÁLOGO ENVIADO por si
   if (message.type === 'catalog' && message.isSent) {
     return (
         <div className={cn("flex mb-4 animate-message-slide-in justify-end")}>
@@ -70,7 +74,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
     );
   }
   
-  // Renderizador para mensagens de PEDIDO RECEBIDO
+  // Renderizador para mensagens de PEDIDO RECEBIDO do cliente
   if (message.type === 'order' && message.metadata?.products) {
     const total = message.metadata.products.reduce((acc, item) => {
         return acc + (parseFloat(item.item_price) * parseInt(item.quantity, 10));
@@ -99,7 +103,14 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                 <span className="text-sm font-bold">Total: R$ {total.toFixed(2)}</span>
                 <span className="text-xs opacity-70">{formatTime(message.timestamp)}</span>
             </div>
-             <Button size="sm" className="w-full mt-3">Ver Pedido no Painel</Button>
+             <Button 
+                size="sm" 
+                className="w-full mt-3"
+                onClick={() => onViewOrder && message.metadata?.orderId && onViewOrder(message.metadata.orderId)}
+                disabled={!onViewOrder || !message.metadata?.orderId}
+            >
+                Ver Pedido no Painel
+            </Button>
         </div>
       </div>
     )

@@ -145,28 +145,36 @@ Deno.serve(async (req) => {
               // 3. Verifica o tipo de mensagem
               if (message.type === 'order') {
                 const orderMessage = message as WhatsAppOrderMessage;
-
-                // 1. Salva na tabela de pedidos (como já fazia)
-                await supabase.from('whatsapp_orders').insert({
-                  conversation_id: conversationData.id,
-                  whatsapp_order_id: orderMessage.id,
+            // 1. Insere o pedido E OBTÉM o seu ID de volta
+            const { data: newOrder, error: orderError } = await supabase
+              .from('whatsapp_orders')
+              .insert({
+                conversation_id: conversationData.id,
+                whatsapp_order_id: orderMessage.id,
+                products: orderMessage.order.product_items,
+                status: 'received',
+              })
+              .select('id') // Pede para retornar o ID do novo pedido
+              .single();
+            
+            if (orderError || !newOrder) {
+              console.error('Error inserting order:', orderError);
+            } else {
+              // 2. Cria a mensagem no chat, guardando o ID do pedido nos metadados
+              await supabase.from('whatsapp_messages').insert({
+                conversation_id: conversationData.id,
+                whatsapp_message_id: message.id,
+                content: `Pedido recebido com ${orderMessage.order.product_items.length} item(ns).`,
+                message_type: 'order',
+                is_from_contact: true,
+                timestamp: new Date(parseInt(message.timestamp) * 1000).toISOString(),
+                metadata: { 
                   products: orderMessage.order.product_items,
-                  status: 'received',
-                });
-
-                // 2. Cria a mensagem visual no chat com os detalhes do pedido
-                await supabase.from('whatsapp_messages').insert({
-                  conversation_id: conversationData.id,
-                  whatsapp_message_id: message.id,
-                  content: `Pedido recebido com ${orderMessage.order.product_items.length} item(ns).`,
-                  message_type: 'order', // NOVO TIPO
-                  is_from_contact: true,
-                  timestamp: new Date(parseInt(message.timestamp) * 1000).toISOString(),
-                  metadata: { // SALVA OS PRODUTOS NA MENSAGEM
-                    products: orderMessage.order.product_items 
-                  }
-                });
-              } else {
+                  orderId: newOrder.id // Guardamos o ID do pedido aqui!
+                }
+              });
+            }
+          } else {
                 // Lógica para mensagens de texto (sem alterações)
                 const textMessage = message as WhatsAppTextMessage;
                 const messageContent = textMessage.text?.body || `[${message.type}]`;
