@@ -1,7 +1,7 @@
 // src/components/MessageBubble.tsx
 
 import { cn } from "@/lib/utils";
-import { Check, CheckCheck, ShoppingCart, BookOpen } from "lucide-react";
+import { Check, CheckCheck, ShoppingCart, BookOpen, CreditCard} from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export interface Message {
@@ -73,6 +73,27 @@ export function MessageBubble({ message, onViewOrder }: MessageBubbleProps) {
         </div>
     );
   }
+  if (message.type === 'payment' && message.metadata?.paymentDetails) {
+        const details = message.metadata.paymentDetails;
+        const formattedAmount = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(details.amount);
+        return (
+            <div className={cn("flex mb-4 animate-message-slide-in justify-end")}>
+                <div className="max-w-xs lg:max-w-md px-4 py-3 rounded-lg shadow-message bg-message-sent text-message-sent-foreground">
+                    <div className="flex items-center gap-3 font-medium mb-2 border-b pb-2 border-white/20">
+                        <CreditCard className="h-5 w-5"/>
+                        <h4 className="font-semibold">Link de Pagamento Enviado</h4>
+                    </div>
+                    <div className="space-y-1 my-2 text-sm">
+                        <p><strong>Descrição:</strong> {details.description}</p>
+                        <p><strong>Valor:</strong> {formattedAmount}</p>
+                    </div>
+                    <Button size="sm" className="w-full mt-3 bg-white/20 hover:bg-white/30" asChild>
+                        <a href={details.link} target="_blank" rel="noopener noreferrer">Ver Link</a>
+                    </Button>
+                </div>
+            </div>
+        );
+    }
   
   // Renderizador para mensagens de PEDIDO RECEBIDO do cliente
   if (message.type === 'order' && message.metadata?.products) {

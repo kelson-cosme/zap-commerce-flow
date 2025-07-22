@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
+// --- Interfaces ---
 export interface WhatsAppContact {
   id: string;
   phone_number: string;
@@ -10,6 +11,7 @@ export interface WhatsAppContact {
   profile_pic_url: string | null;
   created_at: string;
   updated_at: string;
+  cpf_cnpj?: string; // Adicionado para detalhes do cliente
 }
 
 export interface WhatsAppConversation {
@@ -36,19 +38,17 @@ export interface WhatsAppMessage {
   metadata?: any;
 }
 
-// A interface da mensagem para o frontend, usada no Index.tsx
-export interface Message {
-    id: string;
-    text: string;
-    timestamp: string;
-    isSent: boolean;
-    isDelivered?: boolean;
-    isRead?: boolean;
-    type?: 'text' | 'catalog' | 'payment' | 'order' | 'system';
-    metadata?: any;
+interface PaymentDetails {
+    amount: number;
+    description: string;
 }
 
+interface CustomerDetails {
+    name: string;
+    cpfCnpj: string;
+}
 
+// --- Hook ---
 export const useWhatsApp = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,7 +75,6 @@ export const useWhatsApp = () => {
     setLoading(true);
     setError(null);
     try {
-      // Esta chamada é crucial. Ela deve enviar o tipo 'catalog'.
       const { data, error } = await supabase.functions.invoke('whatsapp-send', {
         body: { to, type: 'catalog' }
       });
@@ -101,6 +100,26 @@ export const useWhatsApp = () => {
       return data;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to add product to catalog';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // --- Função Corrigida ---
+  const sendPaymentLink = useCallback(async (to: string, paymentDetails: PaymentDetails, customerDetails: CustomerDetails) => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Garante que todos os 3 parâmetros são enviados no corpo da requisição
+      const { data, error } = await supabase.functions.invoke('whatsapp-send', {
+        body: { to, type: 'payment', paymentDetails, customerDetails }
+      });
+      if (error) throw new Error(error.message);
+      return data;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to send payment link';
       setError(errorMessage);
       throw new Error(errorMessage);
     } finally {
@@ -152,6 +171,7 @@ export const useWhatsApp = () => {
     sendMessage,
     sendCatalog,
     addProductToCatalog,
+    sendPaymentLink,
     getConversations,
     getMessages,
     loading,
