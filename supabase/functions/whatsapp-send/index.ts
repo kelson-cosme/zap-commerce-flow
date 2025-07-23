@@ -7,7 +7,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Interfaces para os dados recebidos pela função
+// --- Interfaces ---
 interface PaymentDetails {
     amount: number;
     description: string;
@@ -16,6 +16,7 @@ interface PaymentDetails {
 interface CustomerDetails {
     name: string;
     cpfCnpj: string;
+    mobilePhone: string;
 }
 
 interface SendMessageRequest {
@@ -26,8 +27,9 @@ interface SendMessageRequest {
   customerDetails?: CustomerDetails;
 }
 
+
 /**
- * Função para criar uma cobrança na API do Asaas e retornar o link de pagamento.
+ * Função para criar uma cobrança na API do Asaas.
  */
 async function createAsaasPayment(paymentDetails: PaymentDetails, customerDetails: CustomerDetails, apiKey: string): Promise<string> {
   const asaasApiBaseUrl = 'https://api.asaas.com/v3'; 
@@ -38,22 +40,35 @@ async function createAsaasPayment(paymentDetails: PaymentDetails, customerDetail
       headers: { 'access_token': apiKey, 'Content-Type': 'application/json' }
   });
   const customerData = await customerResponse.json();
-  console.log("Resposta da busca de cliente Asaas:", JSON.stringify(customerData, null, 2));
-  
   let customerId = customerData.data[0]?.id;
 
   if (!customerId) {
-      console.log("Cliente não encontrado, criando um novo...");
+      console.log("Cliente não encontrado, criando um novo no Asaas...");
+      
+      // --- LÓGICA DE TRATAMENTO DO TELEFONE AQUI ---
+      let phone = customerDetails.mobilePhone.replace(/\D/g, ''); // Remove todos os caracteres não numéricos
+      if (phone.startsWith('55')) {
+          phone = phone.substring(2); // Remove o código do país "55"
+      }
+      // --- FIM DA LÓGICA DE TRATAMENTO ---
+
+      const newCustomerBody = {
+          name: customerDetails.name,
+          cpfCnpj: customerDetails.cpfCnpj,
+          mobilePhone: phone // Envia o número de telefone tratado
+      };
+      
       const newCustomerResponse = await fetch(`${asaasApiBaseUrl}/customers`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'access_token': apiKey },
-          body: JSON.stringify({
-              name: customerDetails.name,
-              cpfCnpj: customerDetails.cpfCnpj,
-          }),
+          body: JSON.stringify(newCustomerBody),
       });
+
       const newCustomerData = await newCustomerResponse.json();
-      console.log("Resposta da criação de cliente Asaas:", JSON.stringify(newCustomerData, null, 2));
+      if (newCustomerData.errors) {
+          console.error("Erro ao criar cliente no Asaas:", newCustomerData.errors);
+          throw new Error(newCustomerData.errors[0].description);
+      }
       customerId = newCustomerData.id;
   }
 
@@ -61,7 +76,7 @@ async function createAsaasPayment(paymentDetails: PaymentDetails, customerDetail
       throw new Error("Não foi possível criar ou encontrar o cliente no Asaas.");
   }
   
-  // 2. Criar a cobrança
+  // 3. Criar a cobrança (sem alterações aqui)
   const dueDate = new Date();
   dueDate.setDate(dueDate.getDate() + 5);
 
@@ -73,8 +88,6 @@ async function createAsaasPayment(paymentDetails: PaymentDetails, customerDetail
     description: paymentDetails.description,
   };
 
-  console.log("Enviando corpo da cobrança para o Asaas:", JSON.stringify(paymentBody, null, 2));
-
   const paymentResponse = await fetch(`${asaasApiBaseUrl}/payments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'access_token': apiKey },
@@ -82,28 +95,18 @@ async function createAsaasPayment(paymentDetails: PaymentDetails, customerDetail
   });
 
   const paymentData = await paymentResponse.json();
-  
-  // --- LOG DE DEPURAÇÃO IMPORTANTE ---
-  console.log("Resposta completa da criação de pagamento Asaas:", JSON.stringify(paymentData, null, 2));
 
   if (!paymentResponse.ok) {
+    console.error("Erro da API do Asaas ao criar pagamento:", paymentData);
     throw new Error(paymentData.errors?.[0]?.description || 'Falha ao criar cobrança no Asaas.');
   }
 
-  // O link de pagamento geralmente está em `invoiceUrl` ou `bankSlipUrl`
-  const paymentLink = paymentData.invoiceUrl || paymentData.bankSlipUrl;
-
-  if (!paymentLink) {
-    console.error("A resposta do Asaas não continha 'invoiceUrl' ou 'bankSlipUrl'.");
-    throw new Error("Não foi possível obter o link de pagamento da resposta do Asaas.");
-  }
-
-  return paymentLink;
+  return paymentData.invoiceUrl;
 }
 
 
 Deno.serve(async (req) => {
-  // ... (o resto da sua função Deno.serve permanece exatamente igual)
+  // O restante da sua função Deno.serve permanece exatamente igual
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
