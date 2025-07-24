@@ -383,7 +383,7 @@ interface AdminPanelProps {
 }
 
 export function AdminPanel({ orderId, onBackToChat }: AdminPanelProps) {
-  const { addProductToCatalog, sendPaymentLink, loading: isWhatsAppLoading } = useWhatsApp();
+  const { addProductToCatalog, sendPaymentLink, sendMessage, loading: isWhatsAppLoading } = useWhatsApp();
   const { toast } = useToast();
   
   const [activeTab, setActiveTab] = useState(orderId ? 'orders' : 'products');
@@ -510,24 +510,70 @@ const handleAddProduct = async () => {
     setIsSaving(true);
     const { error } = await supabase
         .from('whatsapp_orders')
-        .update({ status: orderStatus, tracking_code: trackingCode })
+        .update({
+            status: orderStatus,
+            tracking_code: trackingCode,
+        })
         .eq('id', detailedOrder.id);
     
     if (error) {
         toast({ title: "Erro", description: "Não foi possível atualizar o pedido.", variant: "destructive" });
-    } else {
-        toast({ title: "Sucesso!", description: "Pedido atualizado." });
-
-                setOrders(currentOrders => 
-            currentOrders.map(order => 
-                order.id === detailedOrder.id 
-                    ? { ...order, status: orderStatus, tracking_code: trackingCode } 
-                    : order
-            )
-        );
+        setIsSaving(false);
+        return;
     }
+
+    toast({ title: "Sucesso!", description: "Pedido atualizado." });
+    
+    setOrders(currentOrders => 
+        currentOrders.map(order => 
+            order.id === detailedOrder.id 
+                ? { ...order, status: orderStatus, tracking_code: trackingCode } 
+                : order
+        )
+    );
+
+    let notificationMessage = "";
+    const orderIdentifier = `Pedido #${detailedOrder.id.substring(0, 8)}`;
+
+    switch (orderStatus) {
+        case 'pago':
+            notificationMessage = `Olá, ${detailedOrder.customerName}! 🎉 Confirmámos o pagamento do seu ${orderIdentifier}. Já estamos a preparar tudo para o envio!`;
+            break;
+        case 'processando':
+            notificationMessage = `Boas notícias! O seu ${orderIdentifier} já está em processamento na nossa central.`;
+            break;
+        case 'enviado':
+            if (trackingCode) {
+                notificationMessage = `O seu ${orderIdentifier} foi enviado! 🚚\n\nPode acompanhá-lo com o código de rastreio: *${trackingCode}*`;
+            } else {
+                notificationMessage = `O seu ${orderIdentifier} foi enviado! Em breve receberá o código de rastreio.`;
+            }
+            break;
+        case 'entregue':
+            notificationMessage = `Ótimas notícias! O seu ${orderIdentifier} foi marcado como entregue. Esperamos que goste! 😊`;
+            break;
+    }
+
+    if (notificationMessage && detailedOrder.customerPhoneNumber) {
+        try {
+            await sendMessage(detailedOrder.customerPhoneNumber, notificationMessage);
+            toast({
+                title: "Notificação Enviada",
+                description: "O cliente foi notificado sobre a alteração do status.",
+            });
+        } catch (e) {
+            // --- ADICIONADO LOG DE ERRO DETALHADO ---
+            console.error("Falha ao notificar cliente:", e);
+            toast({
+                title: "Aviso",
+                description: "O status foi atualizado, mas não foi possível notificar o cliente. Verifique o console para mais detalhes.",
+                variant: "destructive"
+            });
+        }
+    }
+    
     setIsSaving(false);
-  };  
+  };
 
   const getStatusVariant = (status: string) => {
     switch (status) {
