@@ -50,10 +50,10 @@ export function MessageBubble({ message, onViewOrder }: MessageBubbleProps) {
   };
 
   // Renderizador para mensagens de CATÁLOGO ENVIADO por si
-  if (message.type === 'catalog' && message.isSent) {
+    if (message.type === 'catalog' && message.isSent) {
     return (
         <div className={cn("flex mb-4 animate-message-slide-in justify-end")}>
-            <div className={cn("max-w-xs lg:max-w-md px-4 py-3 rounded-lg shadow-message bg-message-sent text-message-sent-foreground")}>
+            <div className="max-w-xs lg:max-w-md px-4 py-3 rounded-lg shadow-message bg-message-sent text-message-sent-foreground">
                 <div className="flex items-center gap-3 font-medium mb-2 border-b pb-2 border-white/20">
                     <BookOpen className="h-5 w-5"/>
                     <h4 className="font-semibold">Catálogo Enviado</h4>
@@ -68,11 +68,12 @@ export function MessageBubble({ message, onViewOrder }: MessageBubbleProps) {
                             {message.isRead ? <CheckCheck className="h-4 w-4 text-blue-400" /> : message.isDelivered ? <CheckCheck className="h-4 w-4" /> : <Check className="h-4 w-4" />}
                         </div>
                     )}
-                </div>
+                    </div>
             </div>
         </div>
     );
   }
+
   if (message.type === 'payment' && message.metadata?.paymentDetails) {
         const details = message.metadata.paymentDetails;
         const formattedAmount = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(details.amount);

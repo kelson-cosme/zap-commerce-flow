@@ -15,16 +15,17 @@ import { useToast } from "@/hooks/use-toast";
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'chat' | 'admin'>('chat');
-  const [viewingOrderId, setViewingOrderId] = useState<string | null>(null); // Estado para controlar o ID do pedido
+  const [viewingOrderId, setViewingOrderId] = useState<string | null>(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [whatsappConversations, setWhatsappConversations] = useState<(WhatsAppConversation & { contact: any })[]>([]);
   
-  const { sendMessage, sendCatalog, getConversations, getMessages } = useWhatsApp();
+  const { sendMessage, sendCatalog, getConversations, getMessages, loading } = useWhatsApp();
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // ... (useEffect para carregar conversas e mensagens iniciais não muda)
   useEffect(() => {
     const loadConversations = async () => {
       try {
@@ -34,9 +35,7 @@ const Index = () => {
           setSelectedConversationId(conversations[0].id);
           setSelectedCustomerId(conversations[0].contact?.id);
         }
-      } catch (error) {
-        console.error('Error loading conversations:', error);
-      }
+      } catch (error) { console.error('Error loading conversations:', error); }
     };
     loadConversations();
   }, [getConversations, selectedConversationId]);
@@ -57,14 +56,14 @@ const Index = () => {
             metadata: msg.metadata as any
           }));
           setMessages(convertedMessages);
-        } catch (error) {
-          console.error('Error loading messages:', error);
-        }
+        } catch (error) { console.error('Error loading messages:', error); }
       };
       loadMessages();
     }
   }, [selectedConversationId, getMessages]);
 
+
+  // O useEffect de tempo real permanece, agora como a única fonte de novas mensagens
   useEffect(() => {
     const channel = supabase
       .channel('whatsapp_updates')
@@ -118,19 +117,14 @@ const Index = () => {
       setViewingOrderId(null);
   };
 
+  // --- FUNÇÃO CORRIGIDA ---
   const handleSendMessage = async (text: string) => {
     if (!selectedCustomer || !selectedConversationId) return;
     const whatsappConv = whatsappConversations.find(conv => conv.contact?.id === selectedCustomerId);
     if (!whatsappConv?.contact?.phone_number) return;
     
-    const optimisticMessage: Message = {
-        id: Date.now().toString(),
-        text: text,
-        timestamp: new Date().toISOString(),
-        isSent: true,
-        type: 'text',
-    };
-    setMessages(prev => [...prev, optimisticMessage]);
+    // REMOVIDA A ATUALIZAÇÃO OTIMISTA DAQUI
+    
     try {
       await sendMessage(whatsappConv.contact.phone_number, text);
     } catch (error) {
@@ -139,12 +133,14 @@ const Index = () => {
     }
   };
 
+  // --- FUNÇÃO CORRIGIDA ---
   const handleSendCatalog = async () => {
     if (!selectedCustomer || !selectedConversationId) return;
   
     const whatsappConv = whatsappConversations.find(conv => conv.contact?.id === selectedCustomerId);
     if (!whatsappConv?.contact?.phone_number) return;
   
+    // Adiciona a mensagem otimista ao histórico do chat
     const optimisticCatalogMessage: Message = {
         id: Date.now().toString(),
         text: 'Catálogo de produtos enviado.',
@@ -160,17 +156,15 @@ const Index = () => {
     } catch (error) {
       console.error('Error sending catalog:', error);
       toast({ title: "Erro", description: "Falha ao enviar o catálogo.", variant: "destructive" });
+      // Opcional: remover a mensagem otimista em caso de erro
+      setMessages(prev => prev.filter(msg => msg.id !== optimisticCatalogMessage.id));
     }
   };
   
-  const handleSendPayment = () => {
-    // A sua lógica de pagamento aqui
-  };
+  const handleSendPayment = () => { /* ... */ };
 
   if (currentView === 'admin') {
-    return (
-        <AdminPanel orderId={viewingOrderId} onBackToChat={handleBackToChat} />
-    );
+    return (<AdminPanel orderId={viewingOrderId} onBackToChat={handleBackToChat} />);
   }
 
   return (
@@ -219,15 +213,13 @@ const Index = () => {
               onSendMessage={handleSendMessage}
               onSendCatalog={handleSendCatalog}
               onSendPayment={handleSendPayment}
+              isLoading={loading}
+
             />
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-lg font-medium">Selecione uma conversa</p>
-              <p className="text-muted-foreground">Escolha um cliente para começar a conversar</p>
-            </div>
+            {/* ... */}
           </div>
         )}
       </div>
