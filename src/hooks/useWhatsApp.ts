@@ -47,6 +47,10 @@ interface CustomerDetails {
     name: string;
     cpfCnpj: string;
 }
+interface PaymentDetails { amount: number; description: string; }
+
+interface CustomerDetails { name: string; cpfCnpj: string; mobilePhone: string; }
+
 
 // --- Hook ---
 export const useWhatsApp = () => {
@@ -108,13 +112,13 @@ export const useWhatsApp = () => {
   }, []);
 
   // --- Função Corrigida ---
-  const sendPaymentLink = useCallback(async (to: string, paymentDetails: PaymentDetails, customerDetails: CustomerDetails) => {
+  const sendPaymentLink = useCallback(async (to: string, paymentDetails: PaymentDetails, customerDetails: CustomerDetails, orderId: string) => {
     setLoading(true);
     setError(null);
     try {
       // Garante que todos os 3 parâmetros são enviados no corpo da requisição
       const { data, error } = await supabase.functions.invoke('whatsapp-send', {
-        body: { to, type: 'payment', paymentDetails, customerDetails }
+        body: { to, type: 'payment', paymentDetails, customerDetails, orderId }
       });
       if (error) throw new Error(error.message);
       return data;
@@ -171,7 +175,7 @@ export const useWhatsApp = () => {
     sendMessage,
     sendCatalog,
     addProductToCatalog,
-    sendPaymentLink,
+    sendPaymentLink, 
     getConversations,
     getMessages,
     loading,

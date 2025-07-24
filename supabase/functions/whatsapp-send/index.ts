@@ -372,7 +372,8 @@ Deno.serve(async (req) => {
         const asaasPayment = await createAsaasPayment(paymentDetails, customerDetails, asaasApiKey);
         const paymentLink = asaasPayment.invoiceUrl;
         
-        if (orderId) {
+       if (orderId) {
+            console.log(`Ligando pedido interno ${orderId} ao Asaas ID ${asaasPayment.id}`);
             await supabase
                 .from('whatsapp_orders')
                 .update({ asaas_payment_id: asaasPayment.id })
