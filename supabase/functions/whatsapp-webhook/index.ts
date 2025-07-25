@@ -363,7 +363,11 @@ Deno.serve(async (req) => {
               }
 
               // 4. Atualiza o timestamp da última mensagem na conversa
-              await supabase.from('whatsapp_conversations').update({ last_message_at: new Date().toISOString() }).eq('id', conversationData.id);
+              // await supabase.from('whatsapp_conversations').update({ last_message_at: new Date().toISOString() }).eq('id', conversationData.id);
+                await Promise.all([
+                  supabase.from('whatsapp_conversations').update({ last_message_at: new Date().toISOString() }).eq('id', conversationData.id),
+                  supabase.rpc('increment_unread_count', { conv_id: conversationData.id })
+              ]);
             }
           }
 
