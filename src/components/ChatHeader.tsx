@@ -1,46 +1,44 @@
+// src/components/ChatHeader.tsx
+
+import React from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Phone, Video, MoreVertical } from "lucide-react";
+import { Phone, Video, Search } from "lucide-react";
+import { cn } from '@/lib/utils';
 
 interface ChatHeaderProps {
   customerName: string;
-  customerAvatar?: string;
+  customerAvatar: string;
   isOnline: boolean;
-  onBack?: () => void;
+  children?: React.ReactNode; // Adicionado para permitir componentes filhos, como o sino de notificação
 }
 
-export function ChatHeader({ customerName, customerAvatar, isOnline, onBack }: ChatHeaderProps) {
+export function ChatHeader({ customerName, customerAvatar, isOnline, children }: ChatHeaderProps) {
   return (
-    <div className="flex items-center gap-3 p-4 bg-whatsapp-green border-b">
-      {onBack && (
-        <Button variant="ghost" size="icon" onClick={onBack} className="text-white hover:bg-whatsapp-green-dark">
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-      )}
-      
-      <Avatar className="h-10 w-10">
-        <AvatarImage src={customerAvatar} alt={customerName} />
-        <AvatarFallback className="bg-white text-whatsapp-green font-medium">
-          {customerName.charAt(0).toUpperCase()}
-        </AvatarFallback>
-      </Avatar>
-      
-      <div className="flex-1">
-        <h3 className="font-medium text-white">{customerName}</h3>
-        <p className="text-sm text-white/80">
-          {isOnline ? "online" : "última vez hoje às 14:30"}
-        </p>
+    <div className="flex items-center p-4">
+      <div className="flex items-center gap-4">
+        <Avatar className="h-10 w-10">
+          <AvatarImage src={customerAvatar} alt={customerName} />
+          <AvatarFallback>{customerName.charAt(0).toUpperCase()}</AvatarFallback>
+        </Avatar>
+        <div>
+          <p className="font-semibold">{customerName}</p>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className={cn("h-2 w-2 rounded-full", isOnline ? "bg-green-500" : "bg-gray-400")} />
+            {isOnline ? "Online" : "Offline"}
+          </div>
+        </div>
       </div>
-      
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" className="text-white hover:bg-whatsapp-green-dark">
-          <Video className="h-5 w-5" />
+      <div className="ml-auto flex items-center space-x-2">
+        {children} {/* Renderiza o componente filho (o sino de notificação) que é passado */}
+        <Button variant="ghost" size="icon" className="rounded-full">
+          <Search className="h-5 w-5" />
         </Button>
-        <Button variant="ghost" size="icon" className="text-white hover:bg-whatsapp-green-dark">
+        <Button variant="ghost" size="icon" className="rounded-full">
           <Phone className="h-5 w-5" />
         </Button>
-        <Button variant="ghost" size="icon" className="text-white hover:bg-whatsapp-green-dark">
-          <MoreVertical className="h-5 w-5" />
+        <Button variant="ghost" size="icon" className="rounded-full">
+          <Video className="h-5 w-5" />
         </Button>
       </div>
     </div>

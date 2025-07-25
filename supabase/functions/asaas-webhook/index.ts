@@ -7,15 +7,10 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
   );
 
-  // --- CORREÇÃO AQUI ---
-  // Corrigimos o nome do cabeçalho para corresponder ao que o Asaas envia.
   const asaasToken = req.headers.get('asaas-access-token');
   const expectedToken = Deno.env.get('ASAAS_VERIFICATION_TOKEN');
 
   if (asaasToken?.trim() !== expectedToken?.trim()) {
-    console.error('Falha na autenticação do Webhook: os tokens não correspondem.');
-    // Log para ver o que foi recebido vs. o que era esperado
-    console.log(`Recebido: "${asaasToken}" | Esperado: "${expectedToken}"`);
     return new Response('Authentication failed', { status: 401 });
   }
   
@@ -24,30 +19,34 @@ Deno.serve(async (req) => {
 
     if (event === 'PAYMENT_CONFIRMED' || event === 'PAYMENT_RECEIVED') {
       const asaasPaymentId = payment.id;
-      console.log(`Evento de pagamento recebido para o Asaas ID: ${asaasPaymentId}`);
-
-      const { data, error, count } = await supabase
+      
+      // --- CORRECTION HERE ---
+      // We now select only the 'id' and get the payment value from the Asaas payload.
+      const { data: updatedOrder, error } = await supabase
         .from('whatsapp_orders')
         .update({ status: 'pago' })
         .eq('asaas_payment_id', asaasPaymentId)
-        .select();
+        .select('id') // We only need the order ID
+        .single();
 
-      if (error) {
-        console.error('Erro ao tentar atualizar o status do pedido:', error);
-        return new Response('Error updating order', { status: 500 });
-      }
-
-      if (count === 0) {
-          console.warn(`Nenhum pedido encontrado no banco de dados com o asaas_payment_id: ${asaasPaymentId}.`);
+      if (error || !updatedOrder) {
+        console.error('Error or no order found to update:', error);
       } else {
-          console.log(`${count} pedido(s) com Asaas ID ${asaasPaymentId} foram atualizados para 'pago'. Sucesso!`);
+        console.log(`Order with Asaas ID ${asaasPaymentId} updated to 'paid'.`);
+
+        // Use the value from the Asaas 'payment' object for the notification.
+        const formattedAmount = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(payment.value);
+        const notificationMessage = `Pagamento de ${formattedAmount} recebido para o pedido #${updatedOrder.id.substring(0, 8)}.`;
+        
+        await supabase.from('notifications').insert({
+          message: notificationMessage,
+          link_to: updatedOrder.id
+        });
       }
     }
-
     return new Response('Webhook received and processed', { status: 200 });
-
   } catch (error) {
-    console.error("Erro ao processar o corpo do webhook:", error);
+    console.error("Error processing webhook body:", error);
     return new Response('Invalid JSON body', { status: 400 });
   }
 });

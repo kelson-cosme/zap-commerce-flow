@@ -263,6 +263,7 @@ import { MessageSquare, BarChart3 } from "lucide-react";
 import { useWhatsApp, WhatsAppConversation, WhatsAppMessage } from "@/hooks/useWhatsApp";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { NotificationBell } from "@/components/NotificationBell"; // Importe o novo componente
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'chat' | 'admin'>('chat');
@@ -347,7 +348,7 @@ const Index = () => {
     id: conv.contact?.id || conv.id,
     name: conv.contact?.name || conv.contact?.phone_number || 'Cliente',
     avatar: conv.contact?.profile_pic_url || '',
-    lastMessage: 'Última mensagem...',
+    lastMessage: conv.last_message?.content || 'Última mensagem...',
     timestamp: conv.last_message_at || conv.created_at,
     isOnline: false,
     unreadCount: 0,
@@ -374,8 +375,6 @@ const Index = () => {
     const whatsappConv = whatsappConversations.find(conv => conv.contact?.id === selectedCustomerId);
     if (!whatsappConv?.contact?.phone_number) return;
     
-    // A atualização otimista foi removida daqui para evitar duplicatas
-    
     try {
       await sendMessage(whatsappConv.contact.phone_number, text);
     } catch (error) {
@@ -386,12 +385,9 @@ const Index = () => {
 
   const handleSendCatalog = async () => {
     if (!selectedCustomer || !selectedConversationId) return;
-  
     const whatsappConv = whatsappConversations.find(conv => conv.contact?.id === selectedCustomerId);
     if (!whatsappConv?.contact?.phone_number) return;
-  
-    // A atualização otimista foi removida daqui para evitar duplicatas
-  
+    
     try {
       await sendCatalog(whatsappConv.contact.phone_number);
       toast({ title: "Catálogo enviado", description: "O catálogo foi enviado com sucesso para o cliente." });
@@ -401,9 +397,7 @@ const Index = () => {
     }
   };
   
-  const handleSendPayment = () => { 
-    // Lógica de pagamento (pode ser chamada a partir do AdminPanel)
-  };
+  const handleSendPayment = () => { /* A lógica agora está no AdminPanel */ };
 
   if (currentView === 'admin') {
     return (<AdminPanel orderId={viewingOrderId} onBackToChat={handleBackToChat} />);
@@ -433,9 +427,11 @@ const Index = () => {
                 customerName={selectedCustomer.name}
                 customerAvatar={selectedCustomer.avatar}
                 isOnline={selectedCustomer.isOnline}
-              />
-              <div className="p-2 border-b bg-background">
-                <Button variant="outline" size="sm" onClick={() => setCurrentView('admin')} className="ml-auto flex items-center gap-2">
+              >
+                <NotificationBell onViewOrder={handleViewOrder} />
+              </ChatHeader>
+              <div className="p-2 border-b bg-background flex justify-end">
+                <Button variant="outline" size="sm" onClick={() => setCurrentView('admin')} className="flex items-center gap-2">
                   <BarChart3 className="h-4 w-4" />
                   Painel Admin
                 </Button>
