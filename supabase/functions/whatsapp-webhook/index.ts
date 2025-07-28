@@ -1,228 +1,3 @@
-// // supabase/functions/whatsapp-webhook/index.ts
-
-// import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.52.0'
-
-// const corsHeaders = {
-//   'Access-Control-Allow-Origin': '*',
-//   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-// }
-
-// // Interfaces para a estrutura de dados do webhook do WhatsApp
-// interface WhatsAppWebhookEntry {
-//   id: string;
-//   changes: Array<{
-//     value: {
-//       messaging_product: string;
-//       metadata: {
-//         display_phone_number: string;
-//         phone_number_id: string;
-//       };
-//       contacts?: Array<{
-//         profile: {
-//           name: string;
-//         };
-//         wa_id: string;
-//       }>;
-//       messages?: Array<WhatsAppTextMessage | WhatsAppOrderMessage>; // Aceita ambos os tipos de mensagem
-//       statuses?: Array<{
-//         id: string;
-//         status: string;
-//         timestamp: string;
-//         recipient_id: string;
-//       }>;
-//     };
-//     field: string;
-//   }>;
-// }
-
-// interface WhatsAppWebhookPayload {
-//   object: string;
-//   entry: WhatsAppWebhookEntry[];
-// }
-
-// interface WhatsAppTextMessage {
-//     from: string;
-//     id: string;
-//     timestamp: string;
-//     text?: {
-//       body: string;
-//     };
-//     type: 'text' | 'image' | 'audio' | 'video' | 'document' | 'unknown';
-// }
-
-// interface WhatsAppOrderMessage {
-//   from: string;
-//   id: string;
-//   timestamp: string;
-//   type: 'order';
-//   order: {
-//     catalog_id: string;
-//     product_items: Array<{
-//       product_retailer_id: string;
-//       quantity: string;
-//       item_price: string;
-//       currency: string;
-//     }>;
-//   };
-// }
-
-
-// Deno.serve(async (req) => {
-//   if (req.method === 'OPTIONS') {
-//     return new Response(null, { headers: corsHeaders });
-//   }
-
-//   const supabase = createClient(
-//     Deno.env.get('SUPABASE_URL') ?? '',
-//     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-//   )
-
-//   try {
-//     if (req.method === 'GET') {
-//       // Verificação do Webhook (sem alterações)
-//       const url = new URL(req.url);
-//       const mode = url.searchParams.get('hub.mode');
-//       const token = url.searchParams.get('hub.verify_token');
-//       const challenge = url.searchParams.get('hub.challenge');
-
-//       if (mode === 'subscribe' && token === 'whatsapp_verify_token') {
-//         return new Response(challenge, { status: 200 });
-//       } else {
-//         return new Response('Forbidden', { status: 403 });
-//       }
-//     }
-
-//     if (req.method === 'POST') {
-//       const body: WhatsAppWebhookPayload = await req.json();
-//       console.log('Received webhook:', JSON.stringify(body, null, 2));
-
-//       for (const entry of body.entry) {
-//         for (const change of entry.changes) {
-//           const { value } = change;
-
-//           // Processar mensagens recebidas (de texto ou de pedido)
-//           if (value.messages) {
-//             for (const message of value.messages) {
-//               const phoneNumber = message.from;
-//               let contactName = phoneNumber;
-
-//               if (value.contacts) {
-//                 const contact = value.contacts.find(c => c.wa_id === phoneNumber);
-//                 if (contact) {
-//                   contactName = contact.profile.name;
-//                 }
-//               }
-
-//               // 1. Garante que o contato existe
-//               const { data: contactData, error: contactError } = await supabase
-//                 .from('whatsapp_contacts')
-//                 .upsert({ phone_number: phoneNumber, name: contactName }, { onConflict: 'phone_number' })
-//                 .select().single();
-
-//               if (contactError) {
-//                 console.error('Error upserting contact:', contactError);
-//                 continue;
-//               }
-
-//               // 2. Garante que a conversa existe
-//               let { data: conversationData, error: conversationError } = await supabase
-//                 .from('whatsapp_conversations')
-//                 .select('*').eq('contact_id', contactData.id).eq('is_active', true).single();
-
-//               if (conversationError || !conversationData) {
-//                 const { data: newConversation, error: newConversationError } = await supabase
-//                   .from('whatsapp_conversations')
-//                   .insert({ contact_id: contactData.id, last_message_at: new Date(parseInt(message.timestamp) * 1000).toISOString() })
-//                   .select().single();
-//                 if (newConversationError) {
-//                   console.error('Error creating conversation:', newConversationError);
-//                   continue;
-//                 }
-//                 conversationData = newConversation;
-//               }
-
-//               // --- LÓGICA PARA PROCESSAR PEDIDOS E MENSAGENS ---
-//               // 3. Verifica o tipo de mensagem
-//               if (message.type === 'order') {
-//                 const orderMessage = message as WhatsAppOrderMessage;
-//             // 1. Insere o pedido E OBTÉM o seu ID de volta
-//             const { data: newOrder, error: orderError } = await supabase
-//               .from('whatsapp_orders')
-//               .insert({
-//                 conversation_id: conversationData.id,
-//                 whatsapp_order_id: orderMessage.id,
-//                 products: orderMessage.order.product_items,
-//                 status: 'received',
-//               })
-//               .select('id') // Pede para retornar o ID do novo pedido
-//               .single();
-            
-//             if (orderError || !newOrder) {
-//               console.error('Error inserting order:', orderError);
-//             } else {
-//               // 2. Cria a mensagem no chat, guardando o ID do pedido nos metadados
-//               await supabase.from('whatsapp_messages').insert({
-//                 conversation_id: conversationData.id,
-//                 whatsapp_message_id: message.id,
-//                 content: `Pedido recebido com ${orderMessage.order.product_items.length} item(ns).`,
-//                 message_type: 'order',
-//                 is_from_contact: true,
-//                 timestamp: new Date(parseInt(message.timestamp) * 1000).toISOString(),
-//                 metadata: { 
-//                   products: orderMessage.order.product_items,
-//                   orderId: newOrder.id // Guardamos o ID do pedido aqui!
-//                 }
-//               });
-//             }
-//           } else {
-//                 // Lógica para mensagens de texto (sem alterações)
-//                 const textMessage = message as WhatsAppTextMessage;
-//                 const messageContent = textMessage.text?.body || `[${message.type}]`;
-//                 await supabase.from('whatsapp_messages').insert({
-//                     conversation_id: conversationData.id,
-//                     whatsapp_message_id: message.id,
-//                     content: messageContent,
-//                     message_type: message.type,
-//                     is_from_contact: true,
-//                     timestamp: new Date(parseInt(message.timestamp) * 1000).toISOString(),
-//                   });
-//               }
-
-//               // Atualiza a data da última mensagem na conversa
-//               await supabase
-//                 .from('whatsapp_conversations')
-//                 .update({ last_message_at: new Date(parseInt(message.timestamp) * 1000).toISOString() })
-//                 .eq('id', conversationData.id);
-//             }
-//           }
-
-//           // Processar atualizações de status (sem alterações)
-//           if (value.statuses) {
-//             for (const status of value.statuses) {
-//               await supabase
-//                 .from('whatsapp_messages')
-//                 .update({
-//                   status: status.status,
-//                 })
-//                 .eq('whatsapp_message_id', status.id);
-//             }
-//           }
-//         }
-//       }
-
-//       return new Response('OK', { status: 200, headers: corsHeaders });
-//     }
-
-//     return new Response('Method not allowed', { status: 405, headers: corsHeaders });
-
-//   } catch (error) {
-//     console.error('Webhook error:', error);
-//     return new Response('Internal server error', { status: 500, headers: corsHeaders });
-//   }
-// });
-
-
-
 // supabase/functions/whatsapp-webhook/index.ts
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.52.0'
@@ -270,8 +45,9 @@ Deno.serve(async (req) => {
       const mode = url.searchParams.get('hub.mode');
       const token = url.searchParams.get('hub.verify_token');
       const challenge = url.searchParams.get('hub.challenge');
+      const verifyToken = Deno.env.get('WHATSAPP_VERIFY_TOKEN'); // Use uma variável de ambiente
 
-      if (mode === 'subscribe' && token === Deno.env.get('WHATSAPP_VERIFY_TOKEN')) { // Use uma variável de ambiente para o token
+      if (mode === 'subscribe' && token === verifyToken) {
         return new Response(challenge, { status: 200 });
       } else {
         return new Response('Forbidden', { status: 403 });
@@ -321,8 +97,8 @@ Deno.serve(async (req) => {
                 const fileExtension = mimeType.split('/')[1] || 'webp';
                 const fileName = `${mediaId}.${fileExtension}`;
 
-                await supabase.storage.from('whatsappmedia').upload(fileName, fileBuffer, { contentType: mimeType, upsert: true });
-                const { data: publicUrlData } = supabase.storage.from('whatsappmedia').getPublicUrl(fileName);
+                await supabase.storage.from('whatsapp_media').upload(fileName, fileBuffer, { contentType: mimeType, upsert: true });
+                const { data: publicUrlData } = supabase.storage.from('whatsapp_media').getPublicUrl(fileName);
 
                 await supabase.from('whatsapp_messages').insert({
                     conversation_id: conversationData.id,
@@ -334,21 +110,33 @@ Deno.serve(async (req) => {
                 });
 
               } else if (message.type === 'order') {
-                await supabase.from('whatsapp_orders').insert({
+                const { data: newOrder, error: orderError } = await supabase
+                  .from('whatsapp_orders')
+                  .insert({
                     conversation_id: conversationData.id,
                     whatsapp_order_id: message.id,
                     products: message.order.product_items,
-                    status: 'received',
-                });
-                await supabase.from('whatsapp_messages').insert({
+                    status: 'recebido',
+                  })
+                  .select('id')
+                  .single();
+                
+                if (orderError || !newOrder) {
+                  console.error('Erro ao inserir pedido:', orderError);
+                } else {
+                  await supabase.from('whatsapp_messages').insert({
                     conversation_id: conversationData.id,
                     whatsapp_message_id: message.id,
                     content: `Pedido recebido com ${message.order.product_items.length} item(ns).`,
                     message_type: 'order',
                     is_from_contact: true,
                     timestamp: new Date(parseInt(message.timestamp) * 1000).toISOString(),
-                    metadata: { products: message.order.product_items }
-                });
+                    metadata: { 
+                      products: message.order.product_items,
+                      orderId: newOrder.id // Salva a ligação crucial
+                    }
+                  });
+                }
 
               } else { // Mensagens de texto e outros tipos não tratados
                 const content = message.text?.body || `[${message.type}]`;
@@ -362,9 +150,8 @@ Deno.serve(async (req) => {
                 });
               }
 
-              // 4. Atualiza o timestamp da última mensagem na conversa
-              // await supabase.from('whatsapp_conversations').update({ last_message_at: new Date().toISOString() }).eq('id', conversationData.id);
-                await Promise.all([
+              // 4. Incrementa a contagem de não lidos e atualiza o timestamp
+              await Promise.all([
                   supabase.from('whatsapp_conversations').update({ last_message_at: new Date().toISOString() }).eq('id', conversationData.id),
                   supabase.rpc('increment_unread_count', { conv_id: conversationData.id })
               ]);

@@ -228,7 +228,7 @@ const Index = () => {
             <ChatInput
               onSendMessage={handleSendMessage}
               onSendCatalog={handleSendCatalog}
-              onSendPayment={handleSendPayment}
+              onSendPayment={() => {}}
               isLoading={loading}
             />
           </>
