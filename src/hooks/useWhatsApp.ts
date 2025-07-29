@@ -73,29 +73,34 @@ export const useWhatsApp = () => {
     setLoading(true);
     setError(null);
     try {
-      // Passo 1: Busca todas as conversas e os seus contatos associados.
       const { data: conversations, error } = await supabase
         .from('whatsapp_conversations')
         .select(`
           *,
           contact:whatsapp_contacts(*)
         `)
+        .eq('is_active', true) // Apenas conversas ativas
         .order('last_message_at', { ascending: false, nullsFirst: false });
 
       if (error) throw new Error(error.message);
+      if (!conversations) return [];
 
-      // Passo 2 (Opcional, mas bom para performance): Busca a última mensagem para cada conversa
-      // Se houver muitas conversas, esta parte pode ser otimizada no futuro.
       for (const conv of conversations) {
-        const { data: lastMessage } = await supabase
+        const { data: lastMessageArray, error: msgError } = await supabase
             .from('whatsapp_messages')
             .select('content')
             .eq('conversation_id', conv.id)
             .order('timestamp', { ascending: false })
-            .limit(1)
-            .single();
-        
-        (conv as any).last_message = lastMessage || { content: 'Nenhuma mensagem ainda' };
+            .limit(1);
+
+        if (msgError) {
+          console.warn(`Could not fetch last message for conv ${conv.id}:`, msgError.message);
+          (conv as any).last_message = { content: '...' };
+        } else {
+          // Pega o primeiro item do array, que pode ser nulo se não houver mensagens
+          const lastMessage = lastMessageArray?.[0];
+          (conv as any).last_message = lastMessage || { content: 'Nenhuma mensagem ainda' };
+        }
       }
 
       return conversations as (WhatsAppConversation & { contact: WhatsAppContact, last_message: { content: string } })[];
