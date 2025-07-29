@@ -1,9 +1,7 @@
 
-
-
 // src/pages/Index.tsx
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { ChatHeader } from "@/components/ChatHeader";
 import { MessageBubble, Message } from "@/components/MessageBubble";
 import { ChatInput } from "@/components/ChatInput";
@@ -11,19 +9,22 @@ import { CustomerList, Customer } from "@/components/CustomerList";
 import { AdminPanel } from "@/components/AdminPanel";
 import { WhatsAppStatus } from "@/components/WhatsAppStatus";
 import { Button } from "@/components/ui/button";
-import { MessageSquare, BarChart3 } from "lucide-react";
+import { MessageSquare, BarChart3, LogOut, Loader2 } from "lucide-react";
 import { useWhatsApp, WhatsAppConversation, WhatsAppMessage } from "@/hooks/useWhatsApp";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { NotificationBell } from "@/components/NotificationBell"; // Importe o novo componente
+import { NotificationBell } from "@/components/NotificationBell";
+import { useSession } from "@/hooks/useSession";
 
 const Index = () => {
+  const { session } = useSession();
   const [currentView, setCurrentView] = useState<'chat' | 'admin'>('chat');
   const [viewingOrderId, setViewingOrderId] = useState<string | null>(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [whatsappConversations, setWhatsappConversations] = useState<(WhatsAppConversation & { contact: any, last_message: any })[]>([]);
+  const [isLoadingConversations, setIsLoadingConversations] = useState(true);
   
   const { sendMessage, sendCatalog, getConversations, getMessages, loading } = useWhatsApp();
   const { toast } = useToast();
@@ -32,17 +33,20 @@ const Index = () => {
   // Efeito para carregar as conversas
   useEffect(() => {
     const loadConversations = async () => {
+      if (!session) return;
+      setIsLoadingConversations(true);
       try {
         const conversations = await getConversations();
         setWhatsappConversations(conversations as any);
-        if (conversations.length > 0 && !selectedConversationId) {
-          setSelectedConversationId(conversations[0].id);
-          setSelectedCustomerId(conversations[0].contact?.id);
-        }
-      } catch (error) { console.error('Error loading conversations:', error); }
+      } catch (error) { 
+        console.error('Error loading conversations:', error); 
+        toast({ title: "Erro", description: "Não foi possível carregar as conversas.", variant: "destructive" });
+      } finally {
+        setIsLoadingConversations(false);
+      }
     };
     loadConversations();
-  }, [getConversations, selectedConversationId]);
+  }, [session, getConversations, toast]);
 
   // Efeito para carregar as mensagens de uma conversa selecionada
   useEffect(() => {
@@ -51,19 +55,14 @@ const Index = () => {
         try {
           const msgs = await getMessages(selectedConversationId);
           const convertedMessages: Message[] = msgs.map(msg => ({
-            id: msg.id,
-            text: msg.content,
-            timestamp: msg.timestamp || msg.created_at,
-            isSent: !msg.is_from_contact,
-            isDelivered: msg.status === 'delivered' || msg.status === 'read',
-            isRead: msg.status === 'read',
-            type: msg.message_type as any,
-            metadata: msg.metadata as any
+            id: msg.id, text: msg.content, timestamp: msg.timestamp || msg.created_at, isSent: !msg.is_from_contact, type: msg.message_type as any, metadata: msg.metadata as any
           }));
           setMessages(convertedMessages);
         } catch (error) { console.error('Error loading messages:', error); }
       };
       loadMessages();
+    } else {
+      setMessages([]);
     }
   }, [selectedConversationId, getMessages]);
 
@@ -76,17 +75,10 @@ const Index = () => {
         const newMessage = payload.new as WhatsAppMessage;
         if (newMessage.conversation_id === selectedConversationId) {
           const convertedMessage: Message = {
-            id: newMessage.id,
-            text: newMessage.content,
-            timestamp: newMessage.timestamp || newMessage.created_at,
-            isSent: !newMessage.is_from_contact,
-            type: newMessage.message_type as any,
-            metadata: newMessage.metadata as any
+            id: newMessage.id, text: newMessage.content, timestamp: newMessage.timestamp || newMessage.created_at, isSent: !newMessage.is_from_contact, type: newMessage.message_type as any, metadata: newMessage.metadata as any
           };
           setMessages(prev => [...prev, convertedMessage]);
-
           supabase.rpc('reset_unread_count', { conv_id: newMessage.conversation_id }).then();
-
         }
       })
       .subscribe();
@@ -99,7 +91,7 @@ const Index = () => {
           setWhatsappConversations(currentConvs => 
               currentConvs.map(conv => 
                   conv.id === updatedConv.id ? { ...conv, ...updatedConv } : conv
-              )
+              ).sort((a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime())
           );
       })
       .subscribe();
@@ -110,15 +102,15 @@ const Index = () => {
     };
   }, [selectedConversationId]);
 
+  // Filtra as conversas em "Fila" e "Meus Atendimentos"
+  const { queue, myChats } = useMemo(() => {
+    const queue = whatsappConversations.filter(c => c.assigned_to === null);
+    const myChats = whatsappConversations.filter(c => c.assigned_to === session?.user?.id);
+    return { queue, myChats };
+  }, [whatsappConversations, session]);
+
   const customers: Customer[] = whatsappConversations.map(conv => ({
-    id: conv.contact?.id || conv.id,
-    name: conv.contact?.name || conv.contact?.phone_number || 'Cliente',
-    avatar: conv.contact?.profile_pic_url || '',
-    lastMessage: conv.last_message?.content || 'Última mensagem...',
-    timestamp: conv.last_message_at || conv.created_at,
-    isOnline: false,
-    unreadCount: conv.unread_count || 0,
-    status: 'active' as const
+    id: conv.contact?.id || conv.id, name: conv.contact?.name || conv.contact?.phone_number || 'Cliente', avatar: conv.contact?.profile_pic_url || '', lastMessage: conv.last_message?.content || 'Última mensagem...', timestamp: conv.last_message_at || conv.created_at, unreadCount: conv.unread_count || 0, conversationId: conv.id, isOnline: false, status: 'active' as const,
   }));
   
   const selectedCustomer = customers.find(c => c.id === selectedCustomerId);
@@ -126,16 +118,9 @@ const Index = () => {
   const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); };
   useEffect(() => { scrollToBottom(); }, [messages]);
 
-  const handleViewOrder = (orderId: string) => {
-    setViewingOrderId(orderId);
-    setCurrentView('admin');
-  };
+  const handleViewOrder = (orderId: string) => { setViewingOrderId(orderId); setCurrentView('admin'); };
+  const handleBackToChat = () => { setCurrentView('chat'); setViewingOrderId(null); };
   
-  const handleBackToChat = () => {
-      setCurrentView('chat');
-      setViewingOrderId(null);
-  };
-
   const handleSelectCustomer = async (customerId: string) => {
       setSelectedCustomerId(customerId);
       const conv = whatsappConversations.find(c => c.contact?.id === customerId);
@@ -152,11 +137,45 @@ const Index = () => {
       }
   };
 
+  const handleUnassignChat = useCallback(async () => {
+    if (!selectedConversationId) return;
+    const { error } = await supabase.rpc('unassign_conversation', { conv_id: selectedConversationId });
+    if (error) {
+        toast({ title: "Erro", description: "Não foi possível devolver a conversa à fila.", variant: "destructive" }); return;
+    }
+    setWhatsappConversations(currentConvs => 
+        currentConvs.map(c => 
+            c.id === selectedConversationId ? { ...c, assigned_to: null } : c
+        )
+    );
+    setSelectedConversationId(null);
+    setSelectedCustomerId(null);
+    toast({ title: "Sucesso", description: "A conversa foi devolvida à fila." });
+  }, [selectedConversationId, toast]);
+
+  const handleAssignChat = useCallback(async (conversationId: string) => {
+    if (!session?.user?.id) {
+        toast({ title: "Erro", description: "Utilizador não autenticado.", variant: "destructive" }); return;
+    }
+    const { error } = await supabase.rpc('assign_conversation', { conv_id: conversationId, agent_id: session.user.id });
+    if (error) {
+        toast({ title: "Erro", description: "Não foi possível atender à conversa.", variant: "destructive" }); return;
+    }
+    setWhatsappConversations(currentConvs => {
+        const convToAssign = currentConvs.find(c => c.id === conversationId);
+        if (!convToAssign) return currentConvs;
+        setSelectedCustomerId(convToAssign.contact.id);
+        setSelectedConversationId(convToAssign.id);
+        return currentConvs.map(c => 
+            c.id === conversationId ? { ...c, assigned_to: session.user.id, unread_count: 0 } : c
+        );
+    });
+  }, [session, toast]);
+
   const handleSendMessage = async (text: string) => {
     if (!selectedCustomer || !selectedConversationId) return;
     const whatsappConv = whatsappConversations.find(conv => conv.contact?.id === selectedCustomerId);
     if (!whatsappConv?.contact?.phone_number) return;
-    
     try {
       await sendMessage(whatsappConv.contact.phone_number, text);
     } catch (error) {
@@ -169,10 +188,8 @@ const Index = () => {
     if (!selectedCustomer || !selectedConversationId) return;
     const whatsappConv = whatsappConversations.find(conv => conv.contact?.id === selectedCustomerId);
     if (!whatsappConv?.contact?.phone_number) return;
-    
     try {
       await sendCatalog(whatsappConv.contact.phone_number);
-      toast({ title: "Catálogo enviado", description: "O catálogo foi enviado com sucesso para o cliente." });
     } catch (error) {
       console.error('Error sending catalog:', error);
       toast({ title: "Erro", description: "Falha ao enviar o catálogo.", variant: "destructive" });
@@ -180,9 +197,20 @@ const Index = () => {
   };
   
   const handleSendPayment = () => { /* A lógica agora está no AdminPanel */ };
+  
+  const handleLogout = async () => { await supabase.auth.signOut(); };
 
   if (currentView === 'admin') {
     return (<AdminPanel orderId={viewingOrderId} onBackToChat={handleBackToChat} />);
+  }
+
+  if (isLoadingConversations) {
+    return (
+        <div className="min-h-screen bg-chat-bg flex items-center justify-center">
+            <Loader2 className="h-12 w-12 animate-spin text-muted-foreground" />
+            <p className="ml-4 text-lg text-muted-foreground">A carregar conversas...</p>
+        </div>
+    );
   }
 
   return (
@@ -191,10 +219,18 @@ const Index = () => {
         <div className="flex flex-col h-full">
           <WhatsAppStatus />
           <CustomerList
-            customers={customers}
+            queue={customers.filter(c => queue.some(conv => conv.id === c.conversationId))}
+            myChats={customers.filter(c => myChats.some(conv => conv.id === c.conversationId))}
             selectedCustomerId={selectedCustomerId}
             onSelectCustomer={handleSelectCustomer}
+            onAssignChat={handleAssignChat}
           />
+          <div className="p-4 border-t">
+            <Button variant="ghost" onClick={handleLogout} className="w-full justify-start">
+                <LogOut className="h-4 w-4 mr-2" />
+                Sair
+            </Button>
+          </div>
         </div>
       </div>
       <div className="flex-1 flex flex-col ml-80">
@@ -205,6 +241,7 @@ const Index = () => {
                 customerName={selectedCustomer.name}
                 customerAvatar={selectedCustomer.avatar}
                 isOnline={selectedCustomer.isOnline}
+                onUnassignChat={handleUnassignChat}
               >
                 <NotificationBell onViewOrder={handleViewOrder} />
               </ChatHeader>
@@ -228,7 +265,7 @@ const Index = () => {
             <ChatInput
               onSendMessage={handleSendMessage}
               onSendCatalog={handleSendCatalog}
-              onSendPayment={() => {}}
+              onSendPayment={handleSendPayment}
               isLoading={loading}
             />
           </>
@@ -236,8 +273,8 @@ const Index = () => {
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
               <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-lg font-medium">Selecione uma conversa</p>
-              <p className="text-muted-foreground">Escolha um cliente para começar a conversar</p>
+              <p className="text-lg font-medium">Nenhuma conversa selecionada</p>
+              <p className="text-muted-foreground">Escolha um atendimento ou atenda a um cliente na fila.</p>
             </div>
           </div>
         )}

@@ -24,6 +24,7 @@ export interface WhatsAppConversation {
   contact?: WhatsAppContact;
   last_message?: { content: string };
   unread_count?: number;
+  assigned_to?: string;
 }
 
 export interface WhatsAppMessage {
@@ -67,6 +68,47 @@ export const useWhatsApp = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // --- FUNÇÃO getConversations CORRIGIDA ---
+  const getConversations = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Passo 1: Busca todas as conversas e os seus contatos associados.
+      const { data: conversations, error } = await supabase
+        .from('whatsapp_conversations')
+        .select(`
+          *,
+          contact:whatsapp_contacts(*)
+        `)
+        .order('last_message_at', { ascending: false, nullsFirst: false });
+
+      if (error) throw new Error(error.message);
+
+      // Passo 2 (Opcional, mas bom para performance): Busca a última mensagem para cada conversa
+      // Se houver muitas conversas, esta parte pode ser otimizada no futuro.
+      for (const conv of conversations) {
+        const { data: lastMessage } = await supabase
+            .from('whatsapp_messages')
+            .select('content')
+            .eq('conversation_id', conv.id)
+            .order('timestamp', { ascending: false })
+            .limit(1)
+            .single();
+        
+        (conv as any).last_message = lastMessage || { content: 'Nenhuma mensagem ainda' };
+      }
+
+      return conversations as (WhatsAppConversation & { contact: WhatsAppContact, last_message: { content: string } })[];
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch conversations';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // --- O RESTANTE DO HOOK (sem alterações) ---
   const sendMessage = useCallback(async (to: string, message: string) => {
     setLoading(true); setError(null);
     try {
@@ -111,23 +153,6 @@ export const useWhatsApp = () => {
       return data;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to send payment link';
-      setError(errorMessage); throw new Error(errorMessage);
-    } finally { setLoading(false); }
-  }, []);
-
-  const getConversations = useCallback(async () => {
-    setLoading(true); setError(null);
-    try {
-      const { data, error } = await supabase.from('conversations_with_last_message').select('*').order('last_message_at', { ascending: false });
-      if (error) throw new Error(error.message);
-      const formattedData = data.map(item => ({
-        id: item.conversation_id, contact_id: item.contact_id, last_message_at: item.last_message_at, is_active: item.is_active, created_at: item.created_at, updated_at: item.updated_at, unread_count: item.unread_count,
-        contact: { id: item.contact_id, phone_number: item.phone_number, name: item.name, profile_pic_url: item.profile_pic_url, created_at: item.contact_created_at, updated_at: item.contact_updated_at, cpf_cnpj: item.cpf_cnpj, },
-        last_message: { content: item.last_message_content, }
-      }));
-      return formattedData as (WhatsAppConversation & { contact: WhatsAppContact, last_message: { content: string } })[];
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch conversations';
       setError(errorMessage); throw new Error(errorMessage);
     } finally { setLoading(false); }
   }, []);

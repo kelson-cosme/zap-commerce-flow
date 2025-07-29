@@ -1,27 +1,34 @@
+// src/App.tsx
 import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { Home, User, Settings } from "lucide-react";
+import { Route, Routes} from "react-router-dom";
 import Index from "./pages/Index";
-import NotFound from "./pages/NotFound";
+import { AuthPage } from "./pages/AuthPage"; // Importe a nova página
+import { useSession } from "./hooks/useSession"; // Importe o nosso hook
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
+const App = () => {
+  const { session, loading } = useSession();
+
+  // Mostra um ecrã de carregamento enquanto a sessão está a ser verificada
+  if (loading) {
+    return <div>A carregar...</div>;
+  }
+  
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
         <Routes>
-          <Route path="/" element={<Index />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
+          <Route path="/" element={session ? <Index /> : <AuthPage />} />
+          <Route path="/login" element={<AuthPage />} />
         </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;
