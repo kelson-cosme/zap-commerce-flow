@@ -5,3 +5,35 @@ verify_jwt = false
 
 [functions.whatsapp-send]
 verify_jwt = false
+[functions.whatsapp-get-products]
+enabled = true
+verify_jwt = true
+import_map = "./functions/whatsapp-get-products/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/whatsapp-get-products/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/whatsapp-get-products/*.html" ]
+
+[functions.whatsapp-update-product]
+enabled = true
+verify_jwt = true
+import_map = "./functions/whatsapp-update-product/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/whatsapp-update-product/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/whatsapp-update-product/*.html" ]
+
+[functions.whatsapp-delete-product]
+enabled = true
+verify_jwt = true
+import_map = "./functions/whatsapp-delete-product/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/whatsapp-delete-product/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/whatsapp-delete-product/*.html" ]

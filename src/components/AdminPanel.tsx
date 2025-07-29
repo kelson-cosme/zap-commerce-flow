@@ -1,3 +1,4 @@
+
 // src/components/AdminPanel.tsx
 
 import { useState, useEffect, useMemo } from "react";
@@ -8,6 +9,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
   Package,
   ShoppingCart,
@@ -17,7 +20,10 @@ import {
   ArrowLeft,
   Loader2,
   CreditCard,
-  Save
+  Save,
+  MoreVertical,
+  Trash2,
+  ImageOff 
 } from "lucide-react";
 import { useWhatsApp } from "@/hooks/useWhatsApp";
 import { useToast } from "@/hooks/use-toast";
@@ -37,19 +43,38 @@ interface Order {
   tracking_code: string | null;
 }
 
+interface CatalogProduct {
+  id: string;
+  retailer_id: string;
+  name: string;
+  price: string; // O preço formatado, ex: "R$ 53,00"
+  description: string;
+  image_url: string | null; // A imagem pode ser nula
+}
+
 interface AdminPanelProps {
     orderId?: string | null;
     onBackToChat: () => void;
 }
 
 export function AdminPanel({ orderId, onBackToChat }: AdminPanelProps) {
-  const { addProductToCatalog, sendPaymentLink, sendMessage, loading: isWhatsAppLoading } = useWhatsApp();
+  const { 
+    addProductToCatalog, 
+    sendPaymentLink, 
+    sendMessage, 
+    getProducts,
+    updateProduct,
+    deleteProduct,
+    loading: isWhatsAppLoading 
+  } = useWhatsApp();
   const { toast } = useToast();
   
   const [mainTab, setMainTab] = useState(orderId ? 'orders' : 'products');
   const [statusTab, setStatusTab] = useState('todos');
   const [orders, setOrders] = useState<Order[]>([]);
+  const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(orderId);
+  const [editingProduct, setEditingProduct] = useState<CatalogProduct | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   
   const [customerCpf, setCustomerCpf] = useState("");
@@ -90,8 +115,34 @@ export function AdminPanel({ orderId, onBackToChat }: AdminPanelProps) {
     };
     fetchOrders();
   }, []);
+  
+  // Efeito para buscar os produtos do catálogo
+  useEffect(() => {
+    if (mainTab === 'products') {
+      const fetchProducts = async () => {
+        try {
+          const products = await getProducts();
+                    console.log("Produtos recebidos da API:", products);
 
-  // Filtra os pedidos com base na aba de status selecionada
+          const formattedProducts = products.map((p: any) => ({
+            id: p.id,
+            retailer_id: p.retailer_id,
+            name: p.name,
+            // CORREÇÃO 1: Usar 'formatted_price' e ter um fallback
+            price: p.price || 'Sem preço',
+            description: p.description,
+            // CORREÇÃO 2: A imagem pode ser nula
+            image_url: p.image_url || null,
+          }));
+          setCatalogProducts(formattedProducts);
+        } catch (error) {
+          toast({ title: "Erro ao buscar produtos", description: (error as Error).message, variant: "destructive" });
+        }
+      };
+      fetchProducts();
+    }
+  }, [mainTab, getProducts, toast]);
+
   const filteredOrders = useMemo(() => {
     if (statusTab === 'todos') return orders;
     return orders.filter(order => order.status === statusTab);
@@ -99,13 +150,11 @@ export function AdminPanel({ orderId, onBackToChat }: AdminPanelProps) {
 
   const detailedOrder = orders.find(o => o.id === selectedOrderId);
 
-  // Sincroniza o ID do pedido vindo do chat e atualiza a aba ativa
   useEffect(() => {
     setSelectedOrderId(orderId);
     if (orderId) setMainTab('orders');
   }, [orderId]);
   
-  // Preenche os campos do formulário quando um pedido é selecionado
   useEffect(() => {
     if (detailedOrder) {
         setCustomerCpf(detailedOrder.customerCpfCnpj || "");
@@ -123,6 +172,8 @@ export function AdminPanel({ orderId, onBackToChat }: AdminPanelProps) {
         await addProductToCatalog(newProduct);
         toast({ title: "Produto Adicionado!", description: "O produto foi adicionado ao catálogo da Meta com sucesso." });
         setNewProduct({ name: '', description: '', price: 0, image_url: '', retailer_id: '' });
+        const products = await getProducts();
+        setCatalogProducts(products);
     } catch (error) {
         toast({ title: "Erro ao adicionar produto", description: (error as Error).message, variant: "destructive" });
     }
@@ -191,6 +242,37 @@ export function AdminPanel({ orderId, onBackToChat }: AdminPanelProps) {
     setIsSaving(false);
   };
   
+  const handleUpdateProduct = async () => {
+    if (!editingProduct) return;
+    // Extrai apenas o número do preço para enviar para a API
+    const numericPrice = editingProduct.price.replace(/[^0-9.,]/g, '').replace(',', '.');
+    const fieldsToUpdate = {
+        name: editingProduct.name,
+        // A API da Meta espera o preço em centavos
+        price: Math.round(parseFloat(numericPrice) * 100), 
+        description: editingProduct.description,
+    };
+    try {
+        await updateProduct(editingProduct.id, fieldsToUpdate);
+        toast({ title: "Sucesso!", description: "Produto atualizado." });
+        setCatalogProducts(current => current.map(p => p.id === editingProduct.id ? editingProduct : p));
+        setEditingProduct(null);
+    } catch (error) {
+        toast({ title: "Erro ao atualizar", description: (error as Error).message, variant: "destructive" });
+    }
+  };
+
+  const handleDeleteProduct = async (productId: string) => {
+    if (!confirm("Tem a certeza de que quer apagar este produto? Esta ação não pode ser desfeita.")) return;
+    try {
+        await deleteProduct(productId);
+        toast({ title: "Sucesso!", description: "Produto apagado." });
+        setCatalogProducts(current => current.filter(p => p.id !== productId));
+    } catch (error) {
+        toast({ title: "Erro ao apagar", description: (error as Error).message, variant: "destructive" });
+    }
+  };
+
   const getStatusVariant = (status: string) => {
     switch (status) {
       case 'pago': return 'success';
@@ -217,131 +299,133 @@ export function AdminPanel({ orderId, onBackToChat }: AdminPanelProps) {
                     <TabsTrigger value="products">Produtos</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="orders" className="space-y-4">
-                    {selectedOrderId && detailedOrder ? (
-                        <div>
-                            <Button variant="outline" size="sm" onClick={() => setSelectedOrderId(null)} className="mb-4">
-                                <ArrowLeft className="h-4 w-4 mr-2" />
-                                Voltar para a lista
-                            </Button>
-                            <Card>
-                                <CardHeader><CardTitle>Detalhes do Pedido #{detailedOrder.id.substring(0, 8)}</CardTitle></CardHeader>
-                                <CardContent className="space-y-6">
-                                    <div>
-                                        <p className="mb-2"><strong>Cliente:</strong> {detailedOrder.customerName}</p>
-                                        <p className="mb-2"><strong>Status:</strong> <Badge variant={getStatusVariant(detailedOrder.status) as any}>{detailedOrder.status}</Badge></p>
-                                    </div>
-                                    <div>
-                                        <h4 className="font-semibold mb-2">Itens do Pedido</h4>
-                                        <div className="border rounded-md">
-                                            {detailedOrder.items.map((item, index) => (
-                                                <div key={index} className="flex justify-between items-center p-3 border-b last:border-b-0">
-                                                    <div>
-                                                        <p className="font-medium">{item.quantity}x {item.product_retailer_id}</p>
-                                                        <p className="text-xs text-muted-foreground">R$ {parseFloat(item.item_price).toFixed(2)} cada</p>
-                                                    </div>
-                                                    <p className="font-semibold">R$ {(parseFloat(item.item_price) * parseInt(item.quantity, 10)).toFixed(2)}</p>
-                                                </div>
-                                            ))}
-                                            <div className="flex justify-between items-center p-3 bg-muted/50 font-bold">
-                                                <p>Total</p>
-                                                <p>R$ {detailedOrder.total.toFixed(2)}</p>
-                                            </div>
-                                        </div>
-                                    </div>
+                 <TabsContent value="orders" className="space-y-4">
+                     {selectedOrderId && detailedOrder ? (
+                         <div>
+                             <Button variant="outline" size="sm" onClick={() => setSelectedOrderId(null)} className="mb-4">
+                                 <ArrowLeft className="h-4 w-4 mr-2" />
+                                 Voltar para a lista
+                             </Button>
+                             <Card>
+                                 <CardHeader><CardTitle>Detalhes do Pedido #{detailedOrder.id.substring(0, 8)}</CardTitle></CardHeader>
+                                 <CardContent className="space-y-6">
+                                     <div>
+                                         <p className="mb-2"><strong>Cliente:</strong> {detailedOrder.customerName}</p>
+                                         <p className="mb-2"><strong>Status:</strong> <Badge variant={getStatusVariant(detailedOrder.status) as any}>{detailedOrder.status}</Badge></p>
+                                     </div>
+                                     <div>
+                                         <h4 className="font-semibold mb-2">Itens do Pedido</h4>
+                                         <div className="border rounded-md">
+                                             {detailedOrder.items.map((item, index) => (
+                                                 <div key={index} className="flex justify-between items-center p-3 border-b last:border-b-0">
+                                                     <div>
+                                                         <p className="font-medium">{item.quantity}x {item.product_retailer_id}</p>
+                                                         <p className="text-xs text-muted-foreground">R$ {parseFloat(item.item_price).toFixed(2)} cada</p>
+                                                     </div>
+                                                     <p className="font-semibold">R$ {(parseFloat(item.item_price) * parseInt(item.quantity, 10)).toFixed(2)}</p>
+                                                 </div>
+                                             ))}
+                                             <div className="flex justify-between items-center p-3 bg-muted/50 font-bold">
+                                                 <p>Total</p>
+                                                 <p>R$ {detailedOrder.total.toFixed(2)}</p>
+                                             </div>
+                                         </div>
+                                     </div>
+                                     <div className="space-y-2">
+                                         <Label htmlFor="customer-cpf">CPF / CNPJ do Cliente</Label>
+                                         {detailedOrder.customerCpfCnpj ? (
+                                             <p className="text-sm font-medium p-2 bg-muted rounded-md">{detailedOrder.customerCpfCnpj}</p>
+                                         ) : (
+                                             <Input id="customer-cpf" placeholder="Insira o CPF ou CNPJ para o pagamento" value={customerCpf} onChange={(e) => setCustomerCpf(e.target.value)} />
+                                         )}
+                                     </div>
+                                     <Button onClick={() => handleSendPayment(detailedOrder)} disabled={isWhatsAppLoading || (!detailedOrder.customerCpfCnpj && customerCpf.length < 11)} className="w-full">
+                                         <CreditCard className="h-4 w-4 mr-2" />
+                                         {isWhatsAppLoading ? 'A Enviar...' : 'Gerar e Enviar Link de Pagamento'}
+                                     </Button>
+                                     <hr/>
+                                     <div>
+                                         <h4 className="font-semibold mb-4">Gerir Pedido</h4>
+                                         <div className="grid grid-cols-2 gap-4 mb-4">
+                                             <div className="space-y-2">
+                                                 <Label htmlFor="order-status">Status do Pedido</Label>
+                                                 <Select value={orderStatus} onValueChange={setOrderStatus}>
+                                                     <SelectTrigger id="order-status"><SelectValue /></SelectTrigger>
+                                                     <SelectContent>
+                                                         <SelectItem value="recebido">Recebido</SelectItem>
+                                                         <SelectItem value="pago">Pago</SelectItem>
+                                                         <SelectItem value="processando">Processando</SelectItem>
+                                                         <SelectItem value="enviado">Enviado</SelectItem>
+                                                         <SelectItem value="entregue">Entregue</SelectItem>
+                                                         <SelectItem value="cancelado">Cancelado</SelectItem>
+                                                     </SelectContent>
+                                                 </Select>
+                                             </div>
+                                             <div className="space-y-2">
+                                                 <Label htmlFor="tracking-code">Código de Rastreio</Label>
+                                                 <Input id="tracking-code" placeholder="Insira o código aqui" value={trackingCode} onChange={(e) => setTrackingCode(e.target.value)} disabled={orderStatus !== 'enviado'} />
+                                             </div>
+                                         </div>
+                                         <Button onClick={handleUpdateOrder} disabled={isSaving} className="w-full">
+                                             <Save className="h-4 w-4 mr-2" />
+                                             {isSaving ? 'A Guardar...' : 'Guardar Alterações'}
+                                         </Button>
+                                     </div>
+                                 </CardContent>
+                             </Card>
+                         </div>
+                     ) : (
+                         <Card>
+                            <CardHeader><CardTitle>Todos os Pedidos</CardTitle></CardHeader>
+                            <CardContent>
+                                <Tabs defaultValue="todos" value={statusTab} onValueChange={setStatusTab}>
+                                    <TabsList className="mb-4">
+                                        <TabsTrigger value="todos">Todos</TabsTrigger>
+                                        <TabsTrigger value="recebido">Recebidos</TabsTrigger>
+                                        <TabsTrigger value="pago">Pagos</TabsTrigger>
+                                        <TabsTrigger value="processando">Processando</TabsTrigger>
+                                        <TabsTrigger value="enviado">Enviados</TabsTrigger>
+                                        <TabsTrigger value="entregue">Entregues</TabsTrigger>
+                                    </TabsList>
+                                </Tabs>
+                                {filteredOrders.length > 0 ? (
                                     <div className="space-y-2">
-                                        <Label htmlFor="customer-cpf">CPF / CNPJ do Cliente</Label>
-                                        {detailedOrder.customerCpfCnpj ? (
-                                            <p className="text-sm font-medium p-2 bg-muted rounded-md">{detailedOrder.customerCpfCnpj}</p>
-                                        ) : (
-                                            <Input id="customer-cpf" placeholder="Insira o CPF ou CNPJ para o pagamento" value={customerCpf} onChange={(e) => setCustomerCpf(e.target.value)} />
-                                        )}
+                                        {filteredOrders.map(order => (
+                                            <Card 
+                                                key={order.id} 
+                                                className="hover:bg-muted/50 cursor-pointer transition-colors"
+                                                onClick={() => setSelectedOrderId(order.id)}
+                                            >
+                                                <CardContent className="p-4 grid grid-cols-4 items-center gap-4">
+                                                    <div>
+                                                        <p className="font-semibold text-sm">Pedido #{order.id.substring(0, 8)}</p>
+                                                        <p className="text-xs text-muted-foreground">{order.customerName}</p>
+                                                    </div>
+                                                    <div className="text-center">
+                                                         <Badge variant={getStatusVariant(order.status) as any}>{order.status}</Badge>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="font-bold">R$ {order.total.toFixed(2)}</p>
+                                                    </div>
+                                                    <div className="text-right">
+                                                         <p className="text-xs text-muted-foreground">{new Date(order.createdAt).toLocaleDateString('pt-BR')}</p>
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+                                        ))}
                                     </div>
-                                    <Button onClick={() => handleSendPayment(detailedOrder)} disabled={isWhatsAppLoading || (!detailedOrder.customerCpfCnpj && customerCpf.length < 11)} className="w-full">
-                                        <CreditCard className="h-4 w-4 mr-2" />
-                                        {isWhatsAppLoading ? 'A Enviar...' : 'Gerar e Enviar Link de Pagamento'}
-                                    </Button>
-                                    <hr/>
-                                    <div>
-                                        <h4 className="font-semibold mb-4">Gerir Pedido</h4>
-                                        <div className="grid grid-cols-2 gap-4 mb-4">
-                                            <div className="space-y-2">
-                                                <Label htmlFor="order-status">Status do Pedido</Label>
-                                                <Select value={orderStatus} onValueChange={setOrderStatus}>
-                                                    <SelectTrigger id="order-status"><SelectValue /></SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="recebido">Recebido</SelectItem>
-                                                        <SelectItem value="pago">Pago</SelectItem>
-                                                        <SelectItem value="processando">Processando</SelectItem>
-                                                        <SelectItem value="enviado">Enviado</SelectItem>
-                                                        <SelectItem value="entregue">Entregue</SelectItem>
-                                                        <SelectItem value="cancelado">Cancelado</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label htmlFor="tracking-code">Código de Rastreio</Label>
-                                                <Input id="tracking-code" placeholder="Insira o código aqui" value={trackingCode} onChange={(e) => setTrackingCode(e.target.value)} disabled={orderStatus !== 'enviado'} />
-                                            </div>
-                                        </div>
-                                        <Button onClick={handleUpdateOrder} disabled={isSaving} className="w-full">
-                                            <Save className="h-4 w-4 mr-2" />
-                                            {isSaving ? 'A Guardar...' : 'Guardar Alterações'}
-                                        </Button>
+                                ) : (
+                                    <div className="text-center text-muted-foreground p-8">
+                                        <ShoppingCart className="mx-auto h-12 w-12 mb-4" />
+                                        <p>Nenhum pedido encontrado neste status.</p>
                                     </div>
-                                </CardContent>
-                            </Card>
-                        </div>
-                    ) : (
-                        <Card>
-                           <CardHeader><CardTitle>Todos os Pedidos</CardTitle></CardHeader>
-                           <CardContent>
-                               <Tabs defaultValue="todos" value={statusTab} onValueChange={setStatusTab}>
-                                   <TabsList className="mb-4">
-                                       <TabsTrigger value="todos">Todos</TabsTrigger>
-                                       <TabsTrigger value="recebido">Recebidos</TabsTrigger>
-                                       <TabsTrigger value="pago">Pagos</TabsTrigger>
-                                       <TabsTrigger value="processando">Processando</TabsTrigger>
-                                       <TabsTrigger value="enviado">Enviados</TabsTrigger>
-                                       <TabsTrigger value="entregue">Entregues</TabsTrigger>
-                                   </TabsList>
-                               </Tabs>
-                               {filteredOrders.length > 0 ? (
-                                   <div className="space-y-2">
-                                       {filteredOrders.map(order => (
-                                           <Card 
-                                               key={order.id} 
-                                               className="hover:bg-muted/50 cursor-pointer transition-colors"
-                                               onClick={() => setSelectedOrderId(order.id)}
-                                           >
-                                               <CardContent className="p-4 grid grid-cols-4 items-center gap-4">
-                                                   <div>
-                                                       <p className="font-semibold text-sm">Pedido #{order.id.substring(0, 8)}</p>
-                                                       <p className="text-xs text-muted-foreground">{order.customerName}</p>
-                                                   </div>
-                                                   <div className="text-center">
-                                                        <Badge variant={getStatusVariant(order.status) as any}>{order.status}</Badge>
-                                                   </div>
-                                                   <div className="text-right">
-                                                       <p className="font-bold">R$ {order.total.toFixed(2)}</p>
-                                                   </div>
-                                                   <div className="text-right">
-                                                        <p className="text-xs text-muted-foreground">{new Date(order.createdAt).toLocaleDateString('pt-BR')}</p>
-                                                   </div>
-                                               </CardContent>
-                                           </Card>
-                                       ))}
-                                   </div>
-                               ) : (
-                                   <div className="text-center text-muted-foreground p-8">
-                                       <ShoppingCart className="mx-auto h-12 w-12 mb-4" />
-                                       <p>Nenhum pedido encontrado neste status.</p>
-                                   </div>
-                               )}
-                           </CardContent>
-                        </Card>
-                    )}
-                </TabsContent>
+                                )}
+                            </CardContent>
+                         </Card>
+                     )}
+                 </TabsContent>
+
+
 
                 <TabsContent value="products" className="space-y-4">
                     <Card>
@@ -360,6 +444,60 @@ export function AdminPanel({ orderId, onBackToChat }: AdminPanelProps) {
                           </Button>
                         </CardContent>
                     </Card>
+                    <Card>
+                        <CardHeader><CardTitle>Produtos no Catálogo</CardTitle></CardHeader>
+                        <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {isWhatsAppLoading && !catalogProducts.length ? (
+                                <p>A carregar produtos...</p>
+                            ) : (
+                                catalogProducts.map(product => (
+                                    <Card key={product.id}>
+                                        <CardContent className="p-4 relative">
+                                            {/* CORREÇÃO 3: Exibição robusta da imagem */}
+                                            <div className="w-full h-40 bg-muted rounded-md mb-4 flex items-center justify-center">
+                                                {product.image_url ? (
+                                                    <img src={product.image_url} alt={product.name} className="w-full h-full object-cover rounded-md"/>
+                                                ) : (
+                                                    <ImageOff className="h-12 w-12 text-muted-foreground" />
+                                                )}
+                                            </div>
+                                            <h4 className="font-semibold truncate">{product.name}</h4>
+                                            <p className="text-sm text-muted-foreground">{product.price}</p>
+                                            
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="absolute top-2 right-2 h-8 w-8 rounded-full">
+                                                        <MoreVertical className="h-4 w-4" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    <DropdownMenuItem onClick={() => setEditingProduct(product)}>Editar</DropdownMenuItem>
+                                                    <DropdownMenuItem onClick={() => handleDeleteProduct(product.id)} className="text-red-600">Apagar</DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </CardContent>
+                                    </Card>
+                                ))
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    <Dialog open={!!editingProduct} onOpenChange={() => setEditingProduct(null)}>
+                        <DialogContent>
+                            <DialogHeader><DialogTitle>Editar Produto</DialogTitle></DialogHeader>
+                            <div className="space-y-4 py-4">
+                                <div className="space-y-2"><Label>Nome</Label><Input value={editingProduct?.name || ''} onChange={(e) => setEditingProduct(p => p && {...p, name: e.target.value})} /></div>
+                                <div className="space-y-2"><Label>Preço (ex: 53.00)</Label><Input type="number" value={editingProduct?.price || ''} onChange={(e) => setEditingProduct(p => p && {...p, price: e.target.value})} /></div>
+                                <div className="space-y-2"><Label>Descrição</Label><Input value={editingProduct?.description || ''} onChange={(e) => setEditingProduct(p => p && {...p, description: e.target.value})} /></div>
+                            </div>
+                            <DialogFooter>
+                                <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
+                                <Button onClick={handleUpdateProduct} disabled={isWhatsAppLoading}>
+                                    {isWhatsAppLoading ? <Loader2 className="h-4 w-4 animate-spin"/> : "Guardar Alterações"}
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
                 </TabsContent>
             </Tabs>
         </div>
