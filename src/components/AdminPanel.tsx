@@ -310,8 +310,8 @@ export function AdminPanel({ orderId, onBackToChat }: AdminPanelProps) {
                                  <CardHeader><CardTitle>Detalhes do Pedido #{detailedOrder.id.substring(0, 8)}</CardTitle></CardHeader>
                                  <CardContent className="space-y-6">
                                      <div>
-                                         <p className="mb-2"><strong>Cliente:</strong> {detailedOrder.customerName}</p>
-                                         <p className="mb-2"><strong>Status:</strong> <Badge variant={getStatusVariant(detailedOrder.status) as any}>{detailedOrder.status}</Badge></p>
+                                         <div className="mb-2"><strong>Cliente:</strong> {detailedOrder.customerName}</div>
+                                         <div className="mb-2"><strong>Status:</strong> <Badge variant={getStatusVariant(detailedOrder.status) as any}>{detailedOrder.status}</Badge></div>
                                      </div>
                                      <div>
                                          <h4 className="font-semibold mb-2">Itens do Pedido</h4>
