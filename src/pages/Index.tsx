@@ -544,7 +544,7 @@ const Index = () => {
     }
     
     // const messageToSend = `´Atendente: ${profile.full_name}´\n${text}`;
-    const messageToSend = "`Atendente: `"+profile.full_name+" "+\n{} 
+    const messageToSend = `\`Atendente: ${profile.full_name}\`\n${text}`;
 
     
     try {
