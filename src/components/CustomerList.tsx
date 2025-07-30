@@ -4,8 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // Importe os Tabs
-import { Button } from "@/components/ui/button"; // Importe o Button
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export interface Customer {
   id: string;
@@ -14,7 +13,7 @@ export interface Customer {
   lastMessage: string;
   timestamp: string;
   unreadCount: number;
-  conversationId: string; // Adicionado para sabermos qual conversa atender
+  conversationId: string;
 }
 
 interface CustomerListProps {
@@ -22,7 +21,6 @@ interface CustomerListProps {
   myChats: Customer[];
   selectedCustomerId: string | null;
   onSelectCustomer: (id: string) => void;
-  onAssignChat: (conversationId: string) => void; // Nova função para atender
 }
 
 const ConversationItem = ({ customer, isSelected, onSelect }: { customer: Customer, isSelected: boolean, onSelect: (id: string) => void }) => {
@@ -36,7 +34,7 @@ const ConversationItem = ({ customer, isSelected, onSelect }: { customer: Custom
     <div
       key={customer.id}
       className={cn(
-        "flex items-center p-4 cursor-pointer hover:bg-muted/50 transition-colors",
+        "flex items-center p-4 cursor-pointer hover:bg-muted/50 transition-colors border-b",
         isSelected && "bg-muted"
       )}
       onClick={() => onSelect(customer.id)}
@@ -61,7 +59,7 @@ const ConversationItem = ({ customer, isSelected, onSelect }: { customer: Custom
   );
 };
 
-export function CustomerList({ queue, myChats, selectedCustomerId, onSelectCustomer, onAssignChat }: CustomerListProps) {
+export function CustomerList({ queue, myChats, selectedCustomerId, onSelectCustomer }: CustomerListProps) {
   return (
     <div className="bg-background w-80 border-r flex flex-col h-full">
       <div className="p-4 border-b">
@@ -76,22 +74,12 @@ export function CustomerList({ queue, myChats, selectedCustomerId, onSelectCusto
         <TabsContent value="queue" className="flex-1">
           <ScrollArea className="h-full">
             {queue.map((customer) => (
-                <div key={customer.id} className="border-b">
-                    <ConversationItem
-                      customer={customer}
-                      isSelected={selectedCustomerId === customer.id}
-                      onSelect={onSelectCustomer}
-                    />
-                    <div className="p-2 text-center">
-                        <Button
-                            size="sm"
-                            className="w-full"
-                            onClick={() => onAssignChat(customer.conversationId)}
-                        >
-                            Atender
-                        </Button>
-                    </div>
-                </div>
+              <ConversationItem
+                key={customer.id}
+                customer={customer}
+                isSelected={selectedCustomerId === customer.id}
+                onSelect={onSelectCustomer}
+              />
             ))}
           </ScrollArea>
         </TabsContent>
