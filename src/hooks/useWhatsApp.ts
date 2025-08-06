@@ -68,6 +68,16 @@ export const useWhatsApp = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // const getAuthHeaders = async () => {
+  //   const { data: { session } } = await supabase.auth.getSession();
+  //   if (!session) {
+  //     throw new Error('Utilizador não autenticado.');
+  //   }
+  //   return {
+  //     'Authorization': `Bearer ${session.accessToken}`,
+  //   };
+  // };
+
   // --- FUNÇÃO getConversations CORRIGIDA ---
   const getConversations = useCallback(async () => {
     setLoading(true);
@@ -114,22 +124,57 @@ export const useWhatsApp = () => {
   }, []);
 
   // --- O RESTANTE DO HOOK (sem alterações) ---
-  const sendMessage = useCallback(async (to: string, message: string) => {
-    setLoading(true); setError(null);
-    try {
-      const { data, error } = await supabase.functions.invoke('whatsapp-send', { body: { to, message, type: 'text' } });
-      if (error) throw new Error(error.message);
-      return data;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to send message';
-      setError(errorMessage); throw new Error(errorMessage);
-    } finally { setLoading(false); }
-  }, []);
+// src/hooks/useWhatsApp.ts
+
+const sendMessage = useCallback(async (to: string, message: string) => {
+  setLoading(true);
+  setError(null);
+  try {
+    // Obter a sessão atual para garantir que temos o token mais recente
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      throw new Error("Utilizador não autenticado.");
+    }
+
+    const headers = {
+      Authorization: `Bearer ${session.access_token}`,
+    };
+
+    const { data, error } = await supabase.functions.invoke('whatsapp-send', {
+      body: { to, message, type: 'text' },
+      headers, // Adicionar os cabeçalhos aqui
+    });
+
+    if (error) throw new Error(error.message);
+    return data;
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'Failed to send message';
+    setError(errorMessage);
+    throw new Error(errorMessage);
+  } finally {
+    setLoading(false);
+  }
+}, []);
+
+// Faça o mesmo para as outras funções que chamam 'whatsapp-send' (sendCatalog, sendPaymentLink, etc.)
 
   const sendCatalog = useCallback(async (to: string) => {
     setLoading(true); setError(null);
     try {
-      const { data, error } = await supabase.functions.invoke('whatsapp-send', { body: { to, type: 'catalog' } });
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      throw new Error("Utilizador não autenticado.");
+    }
+
+    const headers = {
+      Authorization: `Bearer ${session.access_token}`,
+    };
+    
+    const { data, error } = await supabase.functions.invoke('whatsapp-send', { 
+        headers, // Envia o cabeçalho de autenticação
+        body: { to, type: 'catalog' } 
+      });
       if (error) throw new Error(error.message);
       return data;
     } catch (err) {
@@ -137,7 +182,7 @@ export const useWhatsApp = () => {
       setError(errorMessage); throw new Error(errorMessage);
     } finally { setLoading(false); }
   }, []);
-  
+
   const addProductToCatalog = useCallback(async (product: { name: string; description: string; price: number; image_url: string; retailer_id: string; }) => {
     setLoading(true); setError(null);
     try {
@@ -150,10 +195,24 @@ export const useWhatsApp = () => {
     } finally { setLoading(false); }
   }, []);
 
-  const sendPaymentLink = useCallback(async (to: string, paymentDetails: PaymentDetails, customerDetails: CustomerDetails, orderId: string) => {
+  const sendPaymentLink = useCallback(async (to: string, paymentDetails: any, customerDetails: any, orderId: string) => {
     setLoading(true); setError(null);
+    
+    
     try {
-      const { data, error } = await supabase.functions.invoke('whatsapp-send', { body: { to, type: 'payment', paymentDetails, customerDetails, orderId } });
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      throw new Error("Utilizador não autenticado.");
+    }
+    
+    const headers = {
+      Authorization: `Bearer ${session.access_token}`,
+    };
+    
+      const { data, error } = await supabase.functions.invoke('whatsapp-send', { 
+        headers, // Envia o cabeçalho de autenticação
+        body: { to, type: 'payment', paymentDetails, customerDetails, orderId } 
+      });
       if (error) throw new Error(error.message);
       return data;
     } catch (err) {
@@ -224,3 +283,4 @@ export const useWhatsApp = () => {
     error,
   };
 };
+

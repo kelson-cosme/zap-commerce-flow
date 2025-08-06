@@ -4,7 +4,7 @@ project_id = "zxgygqznwmjilnctnoqm"
 verify_jwt = false
 
 [functions.whatsapp-send]
-verify_jwt = false
+verify_jwt = true
 [functions.whatsapp-get-products]
 enabled = true
 verify_jwt = true
@@ -37,3 +37,6 @@ entrypoint = "./functions/whatsapp-delete-product/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/whatsapp-delete-product/*.html" ]
+
+[functions.asaas-webhook]
+verify_jwt = false
